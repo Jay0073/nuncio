@@ -67,6 +67,54 @@ One of them is out of date. The v0 event capture will show what a real `permissi
 carries, and that decides which is right. Do not write the v2 permission loop until this is
 settled.
 
+### The TUI does not join an existing server — this shaped v0 and it shapes v3
+
+Running `opencode` starts a TUI **and its own server on a random port**. It does not connect to
+a server started by `opencode serve`. Two instances do not share sessions or events.
+
+To make the TUI and nuncio share one server:
+
+```bash
+opencode serve --port 4096
+opencode attach http://localhost:4096      # or: OPENCODE_API_URL=http://localhost:4096 opencode
+```
+
+Confirmed present in CLI 1.18.3: `opencode attach <url>` — "attach to a running opencode
+server". There is an open feature request (#878) asking for this to be automatic.
+
+**Why this matters beyond v0.** nuncio's whole design assumes one server that many clients can
+watch and drive at once. `opencode attach` proves that model works: the TUI, nuncio, and the
+web UI can all be attached to the same server and see the same session. That is exactly the
+mechanism the v3 handoff needs — the phone is one more client on the same server, not a copy
+of the session. The architecture is sound.
+
+`opencode serve` also warns that `OPENCODE_SERVER_PASSWORD` is not set and the server is
+unsecured. Fine on localhost. **Must be set before v3 binds to the LAN.**
+
+### Permission requests block `session.prompt`
+
+Found by running the v0 model test. A task that needs a tool call causes the server to raise a
+permission request. In a headless server with no client answering permissions, the
+`session.prompt` call never returns. It hangs, with no error and no timeout.
+
+Consequences:
+
+1. The v0 model test uses a task that needs no tools, so it cannot deadlock.
+2. Every call nuncio makes needs a timeout. There is no natural one.
+3. **This is the central fact of v2.** The permission loop is not an extra feature — an
+   unanswered permission stops the agent completely. It also means nuncio can detect a blocked
+   agent reliably, which is exactly the "needs you" ping.
+
+### Model list
+
+`opencode models` prints one `providerID/modelID` per line and contains no credentials. Use it.
+**Do not read the provider config over the API to find model IDs** — that object contains live
+API keys in plaintext. An early version of the v0 script printed one to the terminal. The
+script now redacts, but the safe path is `opencode models`.
+
+399 models are available on this account through the `opencode` provider (OpenCode Zen),
+including `opencode/big-pickle`, the Claude family, GPT-5.x, Gemini 3.x, GLM and DeepSeek.
+
 ### Verified locally, 7 August 2026
 
 - `opencode` CLI version **1.18.3**, installed at `AppData\Roaming\npm\opencode.ps1`.
@@ -179,7 +227,12 @@ exact model identifier as OpenCode reports it, not a remembered display name.
 
 | Model ID (as OpenCode reports it) | Block emitted correctly | Notes |
 |---|---|---|
-| | | |
+| (OpenCode default) | 1 / 1 | smoke test only, not a result. keys: done, ask. ~6–10s per turn. |
+
+**First observation, from the smoke run:** the model wrote `ask: none` instead of leaving the
+line out. Spoken aloud, the report ended with the word "none". The instruction now says
+explicitly not to do this, and `parseSpeakBlock` filters placeholder values anyway. Trust the
+filter, not the instruction.
 
 **How to read the result.** The requirement here is not intelligence. It is consistency at
 following an output format. A smaller model that emits the block every time is better for

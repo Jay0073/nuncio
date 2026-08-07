@@ -106,4 +106,4 @@ function main(): void {
   console.log("docs/07-open-questions.md and LOG.md.");
 }
 
-main();
+if (import.meta.main) main();

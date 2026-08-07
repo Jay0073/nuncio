@@ -36,7 +36,9 @@ ${SPEAK_CLOSE}
 
 Rules:
 - Always emit the block. Even for a small turn. Even if you only answered a question.
-- Include only the lines that apply and drop the rest. At least one line must be present.
+- Include only the lines that apply. If a line does not apply, LEAVE IT OUT COMPLETELY.
+  Never write "none", "N/A", "nothing", or a dash. Those get spoken aloud and sound wrong.
+- At least one line must be present.
 - One sentence per line. No markdown, no code, no bullet points.
 - Write it to be spoken aloud. Say "the auth middleware", not a full file path.
 - Numbers help: "4 files changed", "12 tests pass".
@@ -45,6 +47,15 @@ Rules:
 - Put the block at the very end. Write nothing after ${SPEAK_CLOSE}.`;
 
 const KEY_LINE = new RegExp(`^\\s*(${SPEAK_KEYS.join("|")})\\s*:\\s*(.*)$`, "i");
+
+/**
+ * Values that mean "this line does not apply".
+ *
+ * Models write these instead of leaving the line out, even when told not to. Observed on the
+ * first real run: a model emitted `ask: none`, which would have been spoken as the word
+ * "none" at the end of the report. Filter them here rather than trusting the instruction.
+ */
+const FILLER = /^(none|n\/?a|nothing|no|null|nil|-{1,2}|—|\.)\s*\.?$/i;
 
 /**
  * Pull the block out of an assistant response.
@@ -87,9 +98,11 @@ export function parseSpeakBlock(text: string): SpeakBlock | null {
     }
   }
 
-  // Drop keys the model emitted but left empty.
+  // Drop keys the model emitted but left empty, and keys filled with a placeholder.
   for (const key of SPEAK_KEYS) {
-    if (block[key] === "") delete block[key];
+    const value = block[key];
+    if (value === undefined) continue;
+    if (value === "" || FILLER.test(value)) delete block[key];
   }
 
   return Object.keys(block).length > 0 ? block : null;

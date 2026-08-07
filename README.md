@@ -37,20 +37,36 @@ bun install
 
 ### 1. Capture the event stream
 
-In one terminal:
+**Important:** running `opencode` on its own starts its *own* server on a random port. It does
+not join a server you already started. If you do that, the listener sees only heartbeats,
+because your work is happening on a different server.
+
+Use `opencode attach` so that the TUI and the listener share one server.
+
+Three terminals:
 
 ```bash
+# Terminal 1 — the shared server
 opencode serve --port 4096
-```
 
-In another terminal, from the project root:
-
-```bash
+# Terminal 2 — the listener, from the nuncio project root
 bun run listen
+
+# Terminal 3 — your actual work, attached to the same server
+cd path/to/whatever/you/are/working/on
+opencode attach http://localhost:4096
 ```
 
-Now use OpenCode normally for a full day. Let it finish tasks. Let it ask for permission. Let
-it hit an error. Press Ctrl+C when done to see a summary.
+`OPENCODE_API_URL=http://localhost:4096 opencode` does the same thing if you prefer an
+environment variable.
+
+**How to know it is working:** terminal 2 should show `session.*` and `message.*` events as
+soon as you type in terminal 3. If all you see is `server.heartbeat` every 10 seconds, the TUI
+is not attached.
+
+Now use OpenCode normally for a full day. Two things matter most: let a task run all the way
+to completion, and let it ask you for permission at least once. Those are the events v1 and v2
+are built on. Press Ctrl+C in terminal 2 when done to see a summary.
 
 Everything is written to `events/events-<date>.jsonl`. That directory is git-ignored.
 
@@ -69,10 +85,15 @@ list.
 ### 3. Test the model
 
 ```bash
-bun run model-test                       # 10 runs against OpenCode's default model
-bun run model-test -- --runs 5
-bun run model-test -- --model provider/model-id
+bun run model-test                                  # 10 runs, OpenCode's default model
+bun run model-test -- --model opencode/big-pickle
+bun run model-test -- --model opencode/big-pickle --model opencode/claude-sonnet-5
+bun run model-test -- --runs 5 --timeout 180
 ```
+
+The default task needs no tools, on purpose. A task that calls a tool triggers a permission
+request, and in a headless server with nothing answering permissions that blocks forever. Do
+not use `--tools` until the permission flow is understood.
 
 This measures whether the model reliably emits the `<<SPEAK>>` block. It prints a markdown
 table ready to paste into [docs/06-research.md](docs/06-research.md), and writes every raw

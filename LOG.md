@@ -7,6 +7,53 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-07 — Fixed three real defects found on the first live run
+
+**Version:** v0
+**Type:** fix
+**Changed:**
+
+1. **Credential leak.** `model-test.ts` read the provider config over the API and printed it.
+   That object contains live API keys in plaintext, and one was printed to the terminal. The
+   script now uses `opencode models` for the model list, which contains no credentials, and a
+   `redact()` function scrubs any secret before anything is written or printed. The exposed
+   OpenCode Zen key must be rotated by the owner.
+2. **The workflow instruction was wrong.** Running `opencode` starts its own server on a random
+   port. It does not join `opencode serve`. Following the old README produced a listener that
+   saw only `server.heartbeat`, because the work was happening on a different server. The fix
+   is `opencode attach http://localhost:4096`. README rewritten with three terminals and a
+   "how to know it is working" check.
+3. **The model test hung forever on run 1.** The default task asked the model to count files,
+   which needs a tool call, which raises a permission request. In a headless server with
+   nothing answering permissions, `session.prompt` never returns. The default task now needs no
+   tools, every call has a timeout, and each run reports its elapsed time.
+
+Also added: `import.meta.main` guards on all three v0 entry points, so importing a function
+from one of them does not execute the script.
+
+**Why:** All three were my defects, not usage mistakes. The first is a security problem, the
+second made v0 impossible to run, the third made it look broken.
+
+**Result:** `bun test` — 22 pass, 0 fail. `bun run typecheck` — clean. The model test now
+completes a run in 6 to 10 seconds against the default model and prints a results table.
+
+**Findings recorded in docs/06-research.md:**
+- `opencode attach` confirmed in CLI 1.18.3. This validates the whole architecture: the TUI,
+  nuncio and the web UI can all attach to one server and see the same session. That is exactly
+  the mechanism the v3 phone handoff needs. The phone is one more client, not a copy.
+- **An unanswered permission stops the agent completely.** This makes the v2 permission loop
+  the central feature it was designed to be, and it gives nuncio a reliable way to detect a
+  blocked agent for the "needs you" ping.
+- `opencode serve` warns that `OPENCODE_SERVER_PASSWORD` is unset and the server is unsecured.
+  Fine on localhost. Must be set before v3 binds to the LAN.
+- 399 models are available through the `opencode` provider. The exact default is
+  `opencode/big-pickle`.
+- The model wrote `ask: none` instead of omitting the line, which would have been spoken aloud
+  as the word "none". The persona now forbids it and `parseSpeakBlock` filters placeholder
+  values regardless. Trust the filter, not the instruction.
+
+---
+
 ## 2026-08-07 — v0 built: event listener, analyzer, model test
 
 **Version:** v0

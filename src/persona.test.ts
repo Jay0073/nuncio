@@ -57,6 +57,24 @@ done: Second attempt.
     expect(parseSpeakBlock(text)).toEqual({ done: "Shipped it." });
   });
 
+  test("drops placeholder values instead of speaking them", () => {
+    // Seen on the first real run: a model wrote "ask: none", which would have been spoken
+    // aloud as the word "none" at the end of the report.
+    for (const filler of ["none", "None.", "N/A", "n/a", "nothing", "null", "-", "—"]) {
+      const text = `<<SPEAK>>\ndone: Shipped it.\nask: ${filler}\n<<END>>`;
+      expect(parseSpeakBlock(text)).toEqual({ done: "Shipped it." });
+    }
+  });
+
+  test("returns null when every line is a placeholder", () => {
+    expect(parseSpeakBlock("<<SPEAK>>\ndone: none\nask: N/A\n<<END>>")).toBeNull();
+  });
+
+  test("does not mistake real content that starts with a filler word", () => {
+    const text = "<<SPEAK>>\nblocked: No database credentials in the environment.\n<<END>>";
+    expect(parseSpeakBlock(text)?.blocked).toBe("No database credentials in the environment.");
+  });
+
   test("accepts different casing and spacing", () => {
     const text = "<<SPEAK>>\n  Done :  Ran the tests.\n<<END>>";
     expect(parseSpeakBlock(text)).toEqual({ done: "Ran the tests." });
