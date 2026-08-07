@@ -7,6 +7,40 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-08 — Multi-CLI adapter boundary, and the git/permissions root cause
+
+**Version:** v0
+**Type:** decision
+**Changed:** Added D-017, D-018, D-019 to `docs/05-decisions.md` and a new "adapter boundary"
+section to `docs/04-architecture.md`.
+
+**Why:** The owner also uses Claude Code CLI and Antigravity CLI and wants nuncio to reach them
+eventually. That changes two things we had already written down, so it is better known now than
+after v1.
+
+**Result:**
+
+1. **The core must be push-shaped.** OpenCode is a stream you subscribe to. Claude Code is a set
+   of hooks that call you. A core built around "subscribe to a stream" cannot host Claude Code
+   without a rewrite. A core built around "adapters emit events into nuncio" hosts both. Six
+   normalised event kinds and a small adapter interface are now written down.
+2. **nuncio serves its own page (D-018).** This reverses an earlier note that v3 could lean on
+   OpenCode's web UI. Claude Code has no web UI.
+3. **D-006 looks better than before.** Because the agent produces the `<<SPEAK>>` block, the
+   speak-layer is already CLI-agnostic. Per-CLI work reduces to "get the final text" and "know
+   when a turn ended". The rejected alternative — classifying the raw event stream with a local
+   model — would have needed a separate routing table per CLI.
+
+**Separately — root cause of the missing permission events (D-019).** Permissions never fired
+because OpenCode resolves a project by its **git worktree**. The `standup` folder had no `.git`,
+so `/project/current` returned the `global` project with worktree `/`, and the project-level
+`opencode.json` was never read. Verified directly: before `git init` the worktree was `/`, after
+`git init` it was the real path with `vcs: "git"`. The config was correct the whole time.
+
+nuncio should check this at startup and warn, rather than let it fail silently.
+
+---
+
 ## 2026-08-07 — First real capture: 3779 events over 9 hours
 
 **Version:** v0

@@ -120,6 +120,40 @@ intern persona (lead with outcomes, do not narrate steps) is Track PERSONA L1 an
 v1. Keeping them apart means the v0 measurement answers one question: can this model follow
 the format reliably. Mixing them in would measure two things at once.
 
+### D-017 — Define the adapter boundary in v1, implement only OpenCode
+**Status:** active
+The owner also uses Claude Code CLI and Antigravity CLI and wants nuncio to reach them
+eventually. Implementation stays at Track REACH L3 and later, but the boundary is defined from
+v1. See [04-architecture.md](04-architecture.md).
+
+The load-bearing part: **adapters push events into nuncio; nuncio never pulls from an adapter.**
+OpenCode is a stream you subscribe to. Claude Code is a set of hooks that call you. A
+pull-shaped core cannot host Claude Code without a rewrite. A push-shaped core hosts both.
+
+Adapters declare capabilities rather than being reduced to a common subset. If a CLI cannot
+answer a permission programmatically, nuncio still pings and still speaks the question, and the
+user answers at the keyboard.
+
+This reverses the earlier advice to avoid abstraction until a second adapter exists. That advice
+applies when the second case is imagined. Here it is known.
+
+### D-018 — nuncio serves its own page; it never depends on a CLI's own UI
+**Status:** active
+Supersedes a note in `06-research.md` suggesting v3 could lean on OpenCode's web UI as the
+screen client. Claude Code has no web UI. nuncio's page is minimal — talk button, playback,
+ping, transcript — and is the same page on the desk and on the phone. It may link out to a
+CLI's own UI when one exists, but must not require it.
+
+### D-019 — Project config needs a git repo
+**Status:** active
+Not a design decision, a fact that bit us. OpenCode resolves a project by its git worktree.
+Without `.git`, `/project/current` reports the `global` project with worktree `/`, and a
+project-level `opencode.json` is never loaded — so permission settings silently do nothing.
+
+Consequence for nuncio: when it starts, query `GET /project/current`. If the worktree is `/`,
+warn the user that the server is not attached to a real project. Silent misconfiguration cost
+us a day.
+
 ---
 
 ## Superseded decisions

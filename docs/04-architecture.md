@@ -109,6 +109,102 @@ Phone transport in v3: `opencode web --mdns` binds to `0.0.0.0` and advertises t
 
 ---
 
+## The adapter boundary — define it now, implement one
+
+nuncio will eventually run against OpenCode, Claude Code, and Antigravity. Only the OpenCode
+adapter gets built for a long time, but the boundary is defined from v1.
+
+This reverses the old advice ("do not abstract until the second adapter is needed"). That
+advice is right when the second case is imagined. Here it is known. A six-event interface costs
+an hour now. Retrofitting one costs a rewrite.
+
+### The interface must be push-based, not pull-based
+
+This is the decision that matters, and it is easy to get wrong.
+
+| CLI | How nuncio learns things |
+|---|---|
+| OpenCode | nuncio **pulls** — it subscribes to `GET /event` and reads an SSE stream |
+| Claude Code | Claude Code **pushes** — it runs a hook command at lifecycle moments and passes JSON on stdin |
+| Antigravity | not yet checked |
+
+If the core is written around "subscribe to a stream", Claude Code does not fit and the core
+has to be rewritten. If the core is written around "adapters emit events into nuncio", both
+fit:
+
+- The OpenCode adapter runs an SSE loop and emits.
+- The Claude Code adapter runs a tiny local HTTP endpoint that its hook scripts post to, and
+  emits.
+
+So: **adapters push into nuncio. nuncio never pulls from an adapter.**
+
+### The normalised event set
+
+Six kinds. Add a kind only when a version needs it.
+
+```ts
+type NormalizedEvent =
+  | { kind: "status";              sessionId: string; busy: boolean }
+  | { kind: "turn.finished";       sessionId: string; text: string }
+  | { kind: "permission.requested"; sessionId: string; permissionId: string;
+                                    title: string; options: string[]; risk?: RiskTier }
+  | { kind: "error";               sessionId: string; message: string }
+  | { kind: "diff";                sessionId: string; files: FileChange[] }
+  | { kind: "session.created";     sessionId: string; title?: string }
+```
+
+```ts
+interface AgentAdapter {
+  readonly name: string
+  readonly capabilities: AgentCapabilities
+  start(emit: (event: NormalizedEvent) => void): Promise<void>
+  stop(): Promise<void>
+  sendPrompt(sessionId: string, text: string): Promise<void>
+  abort(sessionId: string): Promise<void>
+  answerPermission(sessionId: string, permissionId: string, answer: string): Promise<void>
+  installPersona(persona: string): Promise<void>   // may be a no-op
+}
+```
+
+### Capabilities, not lowest common denominator
+
+CLIs differ. Some cannot abort. Some cannot answer a permission programmatically. Do not design
+for the weakest one — let each adapter declare what it can do and degrade honestly.
+
+```ts
+interface AgentCapabilities {
+  sendPrompt: boolean
+  abort: boolean
+  answerPermission: boolean
+  installPersona: boolean
+  diffs: boolean
+}
+```
+
+If `answerPermission` is false, nuncio still pings and still speaks the question. It just says
+"answer it at the keyboard" instead of accepting a spoken answer. That is a smaller feature, not
+a broken one.
+
+### Why the `<<SPEAK>>` block makes this cheap
+
+This is the part worth noticing. Because the **agent** produces the block, and every CLI runs a
+model that produces text, the speak-layer is already CLI-agnostic. The only per-CLI work is:
+
+1. get the assistant's final text for a turn
+2. know when a turn ended
+
+That is a tiny surface. Compare it with the design we rejected in D-006: classifying the raw
+event stream with a local model would have needed a separate routing table for every CLI's
+event taxonomy, and those taxonomies have nothing in common. D-006 was a good decision for its
+own reasons. Multi-CLI support makes it a much better one.
+
+### nuncio serves its own page
+
+An earlier note said v3 could lean on OpenCode's web UI as the screen client. **That is wrong as
+a general design.** Claude Code has no web UI. nuncio serves its own minimal page: talk button,
+playback, ping, transcript. When the OpenCode adapter is active it may link out to OpenCode's UI
+as a convenience, but it must never depend on it.
+
 ## Module boundaries
 
 Keep these separate. Each should be understandable and testable on its own.
