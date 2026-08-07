@@ -25,6 +25,59 @@ SSE streaming. `createOpencodeClient({ baseUrl })` connects to an already-runnin
 is exactly the daemon design. A second package, `@opencode-ai/plugin`, exists for authoring
 plugins — not needed here.
 
+### SDK method names
+
+From `opencode.ai/docs/sdk`, August 2026. These are what the code actually calls.
+
+```typescript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+const client = createOpencodeClient({ baseUrl: "http://localhost:4096" })
+
+// events
+const events = await client.event.subscribe()
+for await (const event of events.stream) { /* event.type, event.properties */ }
+
+// sessions
+await client.session.create({ body: { title: "..." } })
+await client.session.list()
+await client.session.get({ path: { id } })
+await client.session.messages({ path: { id } })
+await client.session.abort({ path: { id } })
+
+// prompting
+await client.session.prompt({
+  path: { id },
+  body: {
+    model: { providerID: "...", modelID: "..." },   // omit to use the server default
+    parts: [{ type: "text", text: "..." }],
+  },
+})
+// body.noReply = true sends context without asking for a reply
+
+// permissions
+await client.postSessionByIdPermissionsByPermissionId({
+  path: { id, permissionId },
+  body: { allow: true },
+})
+```
+
+**Discrepancy to resolve before v2.** The REST documentation describes the permission body as
+`{ response, remember? }`. The SDK documentation shows `{ allow: true }`. These do not match.
+One of them is out of date. The v0 event capture will show what a real `permission` event
+carries, and that decides which is right. Do not write the v2 permission loop until this is
+settled.
+
+### Verified locally, 7 August 2026
+
+- `opencode` CLI version **1.18.3**, installed at `AppData\Roaming\npm\opencode.ps1`.
+- `@opencode-ai/sdk` resolved to **1.18.15**. The SDK is slightly ahead of the CLI. No problem
+  seen yet, but if something behaves strangely, check this first.
+- `opencode serve --port 4096` starts and listens.
+- `client.event.subscribe()` works. The listener connected and captured real events.
+- **`server.connected` fires on connect. `server.heartbeat` fires every 10 seconds.**
+  That heartbeat is a free liveness signal — it can drive Track ATTENTION L3 with no extra
+  work, and it tells nuncio immediately when the server has gone away.
+
 **Phone transport:** `opencode web --mdns` binds to `0.0.0.0` and advertises the machine as
 `opencode.local` on the local network. Also `--mdns-domain` and `--cors`.
 
@@ -115,11 +168,26 @@ this less consistently than frontier models. Two consequences:
    block appears, correctly formatted, ten times out of ten. Record the results in the table
    below.
 
+**Default model:** "Big Pickle", the owner's default inside OpenCode. Not published directly by
+a provider. Widely believed to be a Claude Sonnet class model, and it performs well on the
+owner's real coding sessions. See decision D-015.
+
 ### Model test results
 
-Fill this in during v0. Record the exact model identifier as OpenCode reports it, not a
-remembered name.
+Fill this in by running `bun run model-test`. It prints the table ready to paste. Record the
+exact model identifier as OpenCode reports it, not a remembered display name.
 
 | Model ID (as OpenCode reports it) | Block emitted correctly | Notes |
 |---|---|---|
 | | | |
+
+**How to read the result.** The requirement here is not intelligence. It is consistency at
+following an output format. A smaller model that emits the block every time is better for
+nuncio than a smarter model that forgets it half the time.
+
+- 10 / 10 — build v1 on this model.
+- 7 to 9 / 10 — usable, but the fallback (D-013) will fire often. Check whether the fallback
+  report is good enough on its own.
+- Below 7 / 10 — the block contract is not viable on this model. Contingency: have the daemon
+  make one separate cheap call to a small model purely to produce the block. That costs
+  latency and a second model, so treat it as a fallback, not the plan.

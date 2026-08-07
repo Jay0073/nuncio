@@ -1,0 +1,20 @@
+{
+  "name": "nuncio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Voice presence layer for OpenCode coding sessions",
+  "scripts": {
+    "listen": "bun run src/v0/log-events.ts",
+    "analyze": "bun run src/v0/analyze.ts",
+    "model-test": "bun run src/v0/model-test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

@@ -7,6 +7,75 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-07 — v0 built: event listener, analyzer, model test
+
+**Version:** v0
+**Type:** feature
+**Changed:** Added `package.json`, `tsconfig.json`, and:
+- `src/config.ts` — base URL and paths
+- `src/persona.ts` — the `<<SPEAK>>` block contract, its parser, `stripSpeakBlock`, and
+  `renderForSpeech`
+- `src/persona.test.ts` — 12 unit tests for the parser
+- `src/v0/log-events.ts` — connects to `GET /event` and writes every event to
+  `events/events-<date>.jsonl`, with reconnect and a Ctrl+C summary
+- `src/v0/analyze.ts` — counts event types and dumps full payloads for the events v1 and v2
+  depend on
+- `src/v0/model-test.ts` — runs the block contract against a model N times and prints a
+  markdown table of the results
+
+Dependencies: `@opencode-ai/sdk` 1.18.15. Runtime: Bun 1.3.14.
+
+**Why:** v0 exists to replace guesses with measurements. The event shapes and the model's
+formatting reliability decide the whole v1 and v2 design, and both were unknown.
+
+**Result:** Verified end to end. `bun test` — 12 pass, 0 fail. `bun run typecheck` — clean.
+Started `opencode serve --port 4096`, ran the listener, and it connected and captured real
+events. `bun run analyze` read them back correctly. The error path was checked too: analyze
+exits with a clear message when there is no capture yet.
+
+**Findings recorded in docs/06-research.md:**
+- `server.connected` fires on connect; `server.heartbeat` fires every 10 seconds. That
+  heartbeat is a free liveness signal for Track ATTENTION L3.
+- `opencode` CLI is 1.18.3 while the SDK resolved to 1.18.15. Small version drift, no problem
+  seen, but check it first if something behaves oddly.
+- The REST docs and the SDK docs disagree on the permission request body: `{ response,
+  remember? }` versus `{ allow: true }`. Unresolved. The v0 capture will settle it. Do not
+  write the v2 permission loop until it is settled.
+
+**Still to do by the owner:** run `bun run listen` for a full working day, then `bun run
+analyze`, then `bun run model-test`.
+
+---
+
+## 2026-08-07 — Model decision: develop against OpenCode's default
+
+**Version:** v0
+**Type:** decision
+**Changed:** Recorded D-015 and D-016 in `docs/05-decisions.md`. The v0 model test sends no
+`model` field, so the server uses its configured default ("Big Pickle").
+
+**Why:** The default is what the owner actually codes with, and nuncio must not make the
+coding worse. Testing the model in real use is more honest than testing a model picked for the
+test. D-016 keeps the behavioural persona out of v0 so the measurement answers one question
+only: can this model follow the block format.
+
+**Result:** Not yet tested. The results table in `docs/06-research.md` is waiting for numbers,
+with thresholds written down in advance so the decision is not made after seeing the result.
+
+---
+
+## 2026-08-07 — GitHub repository created
+
+**Version:** v0
+**Type:** setup
+**Changed:** Created the private repository `Jay0073/nuncio` and pushed `main`.
+
+**Why:** Decision D-010 — private until v1 passes its kill criterion.
+
+**Result:** Pushed. Remote is `https://github.com/Jay0073/nuncio.git`.
+
+---
+
 ## 2026-08-07 — Project created, documentation set up
 
 **Version:** v0

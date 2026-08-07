@@ -99,6 +99,27 @@ Latin *nuntius*, the messenger who carries word between two parties. The npm nam
 there is no clash in the agent or developer-tool space. Provisional — the owner may change it
 later.
 
+### D-015 — Develop against OpenCode's default model
+**Status:** active
+The owner's default in OpenCode is a model shown as "Big Pickle". It is not a model published
+directly by a provider — it is offered inside OpenCode and is widely believed to be a Claude
+Sonnet class model. It performs well on the owner's real coding sessions, which is the thing
+that matters most, since nuncio must not make the coding worse.
+
+Practical consequence: the v0 model test sends **no** `model` field, so the server uses its
+configured default. That keeps the test honest — it measures the model actually used for work,
+not a model chosen for the test.
+
+Revisit only if the v0 numbers show the block is emitted unreliably. Paid or higher models are
+a fallback, decided by measurement, not by preference.
+
+### D-016 — Test the block contract, not the persona, in v0
+**Status:** active
+`src/persona.ts` contains only the `<<SPEAK>>` block contract. The behavioural half of the
+intern persona (lead with outcomes, do not narrate steps) is Track PERSONA L1 and belongs in
+v1. Keeping them apart means the v0 measurement answers one question: can this model follow
+the format reliably. Mixing them in would measure two things at once.
+
 ---
 
 ## Superseded decisions
