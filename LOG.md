@@ -7,6 +7,45 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-07 — First real capture: 3779 events over 9 hours
+
+**Version:** v0
+**Type:** experiment
+**Changed:** Nothing in code. Findings written into `docs/06-research.md`.
+
+**Why:** v0 exists to replace guesses with measurements. This is the measurement.
+
+**Result — the four things that change the v1 design:**
+
+1. **`message.part.updated` with `part.type === "text"` carries the complete assistant answer**,
+   not a fragment. v1 reads the finished text off one event. It does not need to reassemble the
+   2099 `message.part.delta` events. This is the single most useful finding.
+2. **`session.idle` carries only `{ sessionID }`.** No file count, no token count, no summary.
+   The D-013 fallback report cannot be built from it. It has to come from the message parts.
+3. **`session.status` is exactly `{type:"busy"}` or `{type:"idle"}`.** That is a clean signal
+   for the WORKING and IDLE states in the Track ATTENTION L2 state machine. Cleaner than
+   inferring from `session.idle`.
+4. **`message.updated` fires for user messages too.** v1 must filter on
+   `info.role === "assistant"` or it will react to its own user's input.
+
+**Result — what is still missing, and why v0 is not finished:**
+
+- **No permission event fired in 3779 events.** The whole of v2 depends on this, and the
+  conflict between `{ response, remember? }` and `{ allow: true }` is still unresolved.
+- **Every `session.diff` and `summary.diffs` was empty.** The captured session was read-only.
+  The shape of a real diff is still unknown, and the fallback report needs it.
+- **The model reliability test has not been run properly** — only a one-run smoke test.
+
+**Also noted:** the captured session ran on `opencode/deepseek-v4-flash-free`, not
+`opencode/big-pickle`. D-015 assumes the default is Big Pickle. Confirm which is actually
+selected.
+
+**Also noted:** OpenCode's own web UI already shows the live chat, the tools, the commands, and
+raises a browser notification when a turn ends. This makes v3 smaller — nuncio's page does not
+need to reproduce a chat interface, only the audio surface.
+
+---
+
 ## 2026-08-07 — Fixed three real defects found on the first live run
 
 **Version:** v0

@@ -115,6 +115,72 @@ script now redacts, but the safe path is `opencode models`.
 399 models are available on this account through the `opencode` provider (OpenCode Zen),
 including `opencode/big-pickle`, the Claude family, GPT-5.x, Gemini 3.x, GLM and DeepSeek.
 
+### Real event shapes, from a 9-hour capture (3779 events, 7 August 2026)
+
+Event types seen, most frequent first:
+
+| Count | Type | Use |
+|---|---|---|
+| 2099 | `message.part.delta` | streaming text, token by token |
+| 1127 | `server.heartbeat` | every 10s. Liveness. |
+| 225 | `plugin.added` | ignore |
+| 130 | `message.part.updated` | **the important one, see below** |
+| 70 | `message.updated` | message metadata, role, model |
+| 40 | `session.status` | **`{type:"busy"}` or `{type:"idle"}`** |
+| 28 | `session.updated` | |
+| 20 | `session.diff` | `{ sessionID, diff: [] }` |
+| 5 | `session.idle` | **only `{ sessionID }` — nothing else** |
+| 4 | `session.created` | |
+| 2 | `server.connected` | |
+| 0 | **any permission event** | **never fired. Still unknown.** |
+
+**`session.idle` carries only a session ID.** No file counts, no token counts, no summary. So
+the D-013 fallback report cannot be built from `session.idle` alone. It has to come from the
+message parts or from `session.diff`.
+
+**`message.part.updated` part types:**
+
+| Count | `part.type` | Meaning for nuncio |
+|---|---|---|
+| 63 | `tool` | silence |
+| 22 | `reasoning` | silence, always |
+| 15 | `text` | **the assistant's answer. The `<<SPEAK>>` block lives here.** |
+| 15 | `step-start` | |
+| 15 | `step-finish` | |
+
+**The `text` part carries the complete text, not a fragment.** A captured sample contained a
+full multi-paragraph answer in `properties.part.text`. This is the single most useful finding:
+v1 can read the finished answer straight off one event. No need to reassemble the 2099 delta
+events.
+
+**`message.updated`** carries `properties.info` with `role`, `agent`, `model`
+(`{ providerID, modelID, variant }`), `time`, and `summary.diffs`. Two consequences:
+
+1. It fires for **user** messages too, so v1 must filter on `info.role === "assistant"`.
+2. `summary.diffs` is where changed files should appear. It was empty in this capture.
+
+**Both `session.diff` and `summary.diffs` were empty in every sample.** The captured session
+was read-only — the user asked for an opinion on some code and no files were written. So the
+shape of a real diff is still unknown. Capture a session that writes files before designing
+the fallback report.
+
+**The captured session used `opencode/deepseek-v4-flash-free`, variant `max`** — not
+`opencode/big-pickle`. Worth confirming which model is actually in use, since D-015 assumes
+the default.
+
+### The OpenCode web UI already does more than expected
+
+Observed while capturing: the web UI at the server URL shows the live chat, the tools being
+run, the commands, and it raises a browser notification when a turn finishes. Typing in the
+browser syncs to the attached TUI with no visible delay.
+
+Two consequences for nuncio:
+
+1. **v3 gets smaller.** nuncio's page does not need to reproduce a chat interface. OpenCode's
+   own web UI already is the screen client on the phone. nuncio's page only has to be the
+   audio surface: a talk button, playback, and the ping.
+2. The browser Notification API is a working ping channel for Track ATTENTION L1.
+
 ### Verified locally, 7 August 2026
 
 - `opencode` CLI version **1.18.3**, installed at `AppData\Roaming\npm\opencode.ps1`.
