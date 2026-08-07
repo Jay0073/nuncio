@@ -25,7 +25,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import { BASE_URL, EVENTS_DIR } from "../config.ts";
-import { PERSONA, parseSpeakBlock, renderForSpeech, type SpeakBlock } from "../persona.ts";
+import {
+  REPORT_CONTRACT,
+  parseSpeakBlock,
+  renderForSpeech,
+  type SpeakBlock,
+} from "../report-contract.ts";
 
 type Client = ReturnType<typeof createOpencodeClient>;
 
@@ -226,7 +231,7 @@ async function runOnce(
         path: { id: sessionId },
         body: {
           ...toModelBody(model),
-          parts: [{ type: "text", text: `${PERSONA}\n\n---\n\n${task}` }],
+          parts: [{ type: "text", text: `${REPORT_CONTRACT}\n\n---\n\n${task}` }],
         },
       } as never),
       timeoutMs,

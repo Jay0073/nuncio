@@ -154,6 +154,71 @@ Consequence for nuncio: when it starts, query `GET /project/current`. If the wor
 warn the user that the server is not attached to a real project. Silent misconfiguration cost
 us a day.
 
+### D-020 — No persona. Only a style rule for the spoken summary.
+**Status:** active
+Supersedes S-012. "Intern" was an analogy for the **shape of the text**, not a character to
+install. nuncio does not install a persona, a name, or behavioural instructions. It does not
+tell the agent how to work, how to plan, when to ask questions, or how to code. That would be a
+layer on top of the model's intelligence and would break the constraint about never changing
+the agent.
+
+The real problem is length and style. Claude Code writes long, jargon-heavy turns that are too
+much to listen to. A bare outcome — "done, 20 tests pass" — is too thin and leaves out what
+happened. The target is the middle: the parts of the detailed answer worth hearing, with real
+names and real numbers.
+
+Asking for a fuller *summary* is still only about the summary, so this does not break the rule.
+A 90-word block costs perhaps 120 output tokens against a response already thousands long.
+
+### D-021 — Three keys: did, decision, ask
+**Status:** active
+Was four (`done`, `decision`, `blocked`, `ask`). `done` invited outcome-only reporting, which is
+the failure we are fixing. `did` invites a narrative. Failures, surprises and blockers belong in
+`did` because they are part of what happened.
+
+Fewer keys means better compliance across models, and compliance across models is what makes
+Claude Code and Antigravity cheap later (D-017).
+
+Length scales with the work rather than being fixed: under 25 words for a small turn, 40 to 90
+for a real one, hard cap 120. `Report.overLength` records when a model runs past it, which is
+the signal for tuning the contract.
+
+### D-022 — The contract is installed through `opencode.json` → `instructions`
+**Status:** active
+In v1 the user types in the TUI, so nuncio never sees the prompt and cannot inject anything into
+it. `bun run install-contract -- <project>` writes `.nuncio/spoken-report.md` and adds it to the
+`instructions` array in the project's `opencode.json`. Per project, and reversible with
+`--remove`.
+
+Two consequences to remember: the server must be restarted to reload the config, and an existing
+session keeps the instructions it started with.
+
+### D-023 — The v1 measure replaces the one-week kill criterion
+**Status:** active
+The old criterion was "use it for a week, turn it off for two days, do you miss it". The owner
+already knows the pain is real for him and is building for himself first, so that question is
+answered and the week only delays the work.
+
+What the week genuinely bought cannot be skipped, only compressed: you learn **what should be
+spoken** by hearing the wrong things spoken. So the new measure is:
+
+> Over 10 finished turns, how many times did the spoken report mean you did not need to look at
+> the screen? Target 7 out of 10.
+
+Measurable in an afternoon, and more useful. Below 7, fix the contract, not the idea.
+
+### D-024 — "Tell me more" reads the buffer, not the CLI
+**Status:** active
+Going back to the agent for more detail costs a full round trip, 5 to 20 seconds of silence, and
+tokens. It is also unnecessary: the detailed answer is already on screen and already in nuncio's
+buffer. Reading from the buffer is instant, free, and cannot drift. Track RECALL L2, in v4.
+
+A CLI round trip is only needed for a genuinely new question ("why did you pick that?"), not for
+more detail on what was just said.
+
+Principle to hold: **the first report should be right most of the time.** If "tell me more" is
+needed every turn, the budget is wrong. Fix the budget, do not add a crutch.
+
 ---
 
 ## Superseded decisions
@@ -202,3 +267,18 @@ routing is a known engineering pattern, not open research.
 
 ### S-011 — The twelve-week phased plan
 **Superseded by [03-versions.md](03-versions.md).**
+
+### S-012 — The "intern persona" with behavioural instructions
+**Superseded by D-020.** The plan was to inject behavioural directives — confirm understanding
+before acting, ask clarifying questions proactively, lead with outcomes, do not narrate steps.
+That is a persona, and it changes how the agent works.
+
+The intern was only ever an analogy for the shape of the text. What survives is a style rule for
+the spoken summary. Nothing about how the agent operates.
+
+### S-013 — Four block keys, fixed length
+**Superseded by D-021.** `done` invited "it is finished" and nothing more, which is the exact
+failure being fixed.
+
+### S-014 — v3 can lean on OpenCode's web UI as the screen client
+**Superseded by D-018.** Claude Code has no web UI.

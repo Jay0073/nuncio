@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>nuncio</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0e1013; --fg: #e8e6e3; --dim: #8b9199; --line: #23272e;
+    --done: #4ade80; --need: #fbbf24; --err: #f87171; --work: #60a5fa;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #fbfaf9; --fg: #1a1d21; --dim: #6b7280; --line: #e4e2df; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  }
+  header { width: 100%; max-width: 620px; display: flex; align-items: center;
+           justify-content: space-between; gap: 12px; margin-bottom: 28px; }
+  .brand { font-weight: 600; letter-spacing: -0.01em; }
+  .brand span { color: var(--dim); font-weight: 400; }
+  main { width: 100%; max-width: 620px; flex: 1; display: flex;
+         flex-direction: column; gap: 20px; }
+
+  .status { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--dim); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.WORKING { background: var(--work); animation: pulse 1.4s ease-in-out infinite; }
+  .dot.PENDING { background: var(--need); }
+  .dot.SPEAKING { background: var(--done); }
+  .dot.error { background: var(--err); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .card.waiting { border-color: var(--need); }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+           color: var(--dim); margin-bottom: 10px; }
+  .report { font-size: 17px; line-height: 1.6; white-space: pre-wrap; }
+  .files { margin-top: 14px; font-size: 13px; color: var(--dim);
+           word-break: break-all; }
+  .meta { margin-top: 12px; font-size: 12px; color: var(--dim); }
+
+  button {
+    font: inherit; font-weight: 550; cursor: pointer; border-radius: 11px;
+    border: 1px solid var(--line); background: transparent; color: var(--fg);
+    padding: 13px 18px; transition: background .12s, border-color .12s;
+  }
+  button:hover:not(:disabled) { background: color-mix(in oklab, var(--fg) 8%, transparent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); width: 100%; }
+  .row { display: flex; gap: 10px; }
+  .row button { flex: 1; }
+  .idle { color: var(--dim); text-align: center; padding: 40px 0; }
+  .warn { border: 1px solid var(--need); border-radius: 11px; padding: 12px 14px;
+          font-size: 14px; color: var(--need); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">nuncio <span id="conn">connecting</span></div>
+  <button id="enable" style="font-size:13px;padding:8px 12px">Enable sound</button>
+</header>
+
+<main>
+  <div class="status"><span class="dot" id="dot"></span><span id="stateLabel">…</span></div>
+  <div id="body"></div>
+</main>
+
+<script>
+// ---------------------------------------------------------------------------
+// Audio. Three tones, generated with WebAudio so no sound files are needed.
+// You learn what happened from the tone alone, without looking at anything.
+// ---------------------------------------------------------------------------
+let audio = null;
+let soundReady = false;
+
+function enableSound() {
+  audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+  audio.resume();
+  // Browsers block audio until a user gesture. Speech has the same rule, so prime it too.
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch {}
+  soundReady = true;
+  document.getElementById("enable").textContent = "Sound on";
+  document.getElementById("enable").disabled = true;
+  if (window.Notification && Notification.permission === "default") Notification.requestPermission();
+}
+document.getElementById("enable").addEventListener("click", enableSound);
+
+const TONES = {
+  // done: two notes rising. Neutral, easy to ignore.
+  "done":      [[660, 0], [880, 0.11]],
+  // needs-you: three quick notes. Distinctly more urgent.
+  "needs-you": [[880, 0], [880, 0.13], [1170, 0.26]],
+  // error: two notes falling, low. Unmistakable.
+  "error":     [[440, 0], [300, 0.16]],
+};
+
+function ping(kind) {
+  if (!soundReady || !audio) return;
+  for (const [freq, at] of TONES[kind] || TONES.done) {
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const t = audio.currentTime + at;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.16, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  }
+}
+
+function notify(text) {
+  if (!window.Notification || Notification.permission !== "granted") return;
+  if (document.visibilityState === "visible") return;
+  try { new Notification("nuncio", { body: text, silent: true }); } catch {}
+}
+
+// ---------------------------------------------------------------------------
+// Speech
+// ---------------------------------------------------------------------------
+function speak(text, onEnd) {
+  try {
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.05;
+    utterance.onend = onEnd;
+    utterance.onerror = onEnd;
+    speechSynthesis.speak(utterance);
+  } catch { onEnd(); }
+}
+
+// ---------------------------------------------------------------------------
+// Connection
+// ---------------------------------------------------------------------------
+let socket = null;
+let state = null;
+let lastWaitingKey = null;
+
+function send(kind) { try { socket.send(JSON.stringify({ kind })); } catch {} }
+
+function connect() {
+  socket = new WebSocket(`ws://${location.host}/ws`);
+  socket.onopen = () => { document.getElementById("conn").textContent = ""; };
+  socket.onclose = () => {
+    document.getElementById("conn").textContent = "reconnecting";
+    setTimeout(connect, 1200);
+  };
+  socket.onmessage = (event) => {
+    state = JSON.parse(event.data);
+    render();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+const LABELS = {
+  IDLE: "Nothing running",
+  WORKING: "Agent is working",
+  PENDING: "Waiting for you",
+  SPEAKING: "Speaking",
+};
+
+function render() {
+  if (!state) return;
+  const waiting = state.waiting;
+
+  const dot = document.getElementById("dot");
+  dot.className = "dot " + (waiting && waiting.ping === "error" ? "error" : state.state);
+  document.getElementById("stateLabel").textContent = LABELS[state.state] || state.state;
+
+  // Ping once per new waiting item, never on a re-render.
+  const key = waiting ? waiting.ping + "|" + waiting.report.text : null;
+  if (key && key !== lastWaitingKey) {
+    ping(waiting.ping);
+    notify(waiting.ping === "needs-you" ? "Needs your answer" : waiting.report.text.slice(0, 90));
+  }
+  lastWaitingKey = key;
+
+  const body = document.getElementById("body");
+
+  if (!waiting) {
+    body.innerHTML = state.state === "WORKING"
+      ? `<div class="idle">Working. You will hear a tone when it needs you.</div>`
+      : `<div class="idle">Nothing waiting.</div>`;
+    return;
+  }
+
+  const report = waiting.report;
+  const speaking = state.state === "SPEAKING";
+
+  body.innerHTML = `
+    ${soundReady ? "" : `<div class="warn">Press “Enable sound” once so the browser lets nuncio play audio.</div>`}
+    <div class="card waiting">
+      <div class="label">${escapeHtml(sourceLabel(report.source))}</div>
+      <div class="report">${escapeHtml(report.text)}</div>
+      ${report.files.length ? `<div class="files">Changed: ${escapeHtml(report.files.join(", "))}</div>` : ""}
+      ${report.overLength ? `<div class="meta">Report ran long: ${report.overLength} words.</div>` : ""}
+      ${report.source === "fallback" ? `<div class="meta">The agent wrote no summary block.</div>` : ""}
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="primary" id="listen">${speaking ? "Speaking…" : "Listen"}</button>
+      <button id="dismiss">Dismiss</button>
+    </div>`;
+
+  document.getElementById("listen").onclick = () => {
+    if (!soundReady) enableSound();
+    send("ui.open");
+    speak(report.text, () => send("ui.done"));
+  };
+  document.getElementById("dismiss").onclick = () => {
+    try { speechSynthesis.cancel(); } catch {}
+    send("ui.done");
+  };
+}
+
+function sourceLabel(source) {
+  return { block: "Report", fallback: "Report (no summary)", permission: "Permission needed",
+           question: "Question", error: "Error" }[source] || "Report";
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+connect();
+</script>
+</body>
+</html>

@@ -22,10 +22,70 @@ works.
 
 ## Status
 
-Current version: **v0 — the Listening Post.** No product code yet. v0 exists to replace
-guesses with measurements.
+Current version: **v1 — The Report.** Built and working end to end.
 
 See [AGENTS.md](AGENTS.md) for the documentation index.
+
+## Running v1
+
+Requires [Bun](https://bun.sh) and `opencode`. Run `bun install` once.
+
+### One-time, per project
+
+The project **must be a git repository**. OpenCode resolves a project by its git worktree, and
+without one it silently ignores the project config — including nuncio's contract.
+
+```bash
+cd C:\path\to\your\project
+git init                                    # if it is not a repo yet
+```
+
+From the nuncio folder, install the spoken report contract into that project:
+
+```bash
+bun run install-contract -- C:\path\to\your\project
+```
+
+That writes `.nuncio/spoken-report.md` and adds it to `instructions` in the project's
+`opencode.json`. Reverse it any time with `--remove`.
+
+### Every session — three terminals
+
+```bash
+# 1. The shared server, started INSIDE the project
+cd C:\path\to\your\project
+opencode serve --port 4096
+
+# 2. nuncio, from the nuncio folder
+bun run v1
+#    -> open http://127.0.0.1:4747 and press "Enable sound" once
+
+# 3. Your work, attached to the same server
+cd C:\path\to\your\project
+opencode attach http://localhost:4096
+```
+
+Running plain `opencode` starts its **own** server on a random port and nuncio will see
+nothing. Use `opencode attach`.
+
+### What happens
+
+Work normally. When a turn finishes, nuncio plays a short tone:
+
+| Tone | Meaning |
+|---|---|
+| two notes rising | done |
+| three quick notes | it needs an answer from you |
+| two notes falling | error |
+
+nuncio never speaks on its own. When you are ready, click **Listen** and it reads the summary
+the agent wrote. If the agent wrote no summary, it says so and tells you to check the screen —
+it will never read the raw response aloud.
+
+The `<<SPEAK>>` block is visible in your terminal. nuncio sits outside the CLI and cannot edit
+what the TUI prints. It is short, and it is a useful check on what nuncio received.
+
+`OPENCODE_URL`, `NUNCIO_PORT` and `NUNCIO_HOST` override the defaults.
 
 ## Running v0
 

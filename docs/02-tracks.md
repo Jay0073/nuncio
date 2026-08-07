@@ -32,7 +32,7 @@ There are eight tracks. Every idea belongs to one of them, at one level.
 |---|---|
 | L0 | Nothing. You read the screen. |
 | L1 | The agent marks its own highlights in a `<<SPEAK>>` block. The daemon strips the block from the visible output and speaks it verbatim. |
-| L2 | The daemon reformats for the ear. Strip markdown. Shorten paths. Lists become natural speech. Code references become spoken form. |
+| L2 | The daemon reformats for the ear. Strip markdown. Shorten paths. Lists become natural speech. Two voices — one for the agent's words, one for nuncio's own — so you always know who is speaking. |
 | L3 | Ranking and a time budget. The agent emits ordered items with a priority. The daemon has a fixed speech budget, for example 20 seconds. It speaks down the list until the budget runs out, then says "there is more, want it?" |
 | L4 | A local model classifies text the agent did not mark. |
 | L5 | A fine-tuned model on collected labels. Adapts per project. |
@@ -208,20 +208,78 @@ question about history, and the user walks away believing work is underway when 
 
 ---
 
-## Track 7 — PERSONA: how the agent behaves and who it sounds like
+## Track 7 — REPORT: how the spoken summary is written
+
+**This track was called PERSONA. That name was wrong and it led the design astray.** See D-020.
+
+nuncio does not install a persona, a character, or a name. It does not tell the agent how to
+work, how to plan, when to ask questions, or how to code. That would be a layer on top of the
+model's intelligence, and it would break the constraint about never changing the agent.
+
+The real problem is length and style. The two ends of it:
+
+- **Claude Code** writes long, descriptive, jargon-heavy turns. Too much to listen to.
+- **An over-corrected summary** — "I deleted it, ran the tests, restored it, all 20 pass" —
+  is too thin. It leaves out what actually happened.
+
+The target is the middle: the parts of the detailed answer that are worth hearing, with real
+names and real numbers.
 
 | Level | What it is |
 |---|---|
-| L0 | Default agent. |
-| L1 | Injected intern persona plus the `<<SPEAK>>` block contract. |
-| L2 | Binary decision contract. When a decision is binary, the agent must ask it as one line with a stated default, so it is answerable in one word. |
-| L3 | The persona changes with the mode. Terser on the phone than at the desk. |
-| L4 | Named identity and a fixed voice. Two voices — one for the agent's words, one for nuncio's own words, so the user always knows who is speaking. |
-| L5 | Multiple agents with distinct voices. |
+| L0 | Nothing. The agent writes however it writes. |
+| L1 | The `<<SPEAK>>` block contract plus the style rule. Length scales with the work: under 25 words for a small turn, 40 to 90 for a real one, never past 120. |
+| L2 | Binary decisions phrased as one line with options, so they are answerable in one word. |
+| L3 | Length adapts to where you are. Shorter on the phone than at the desk. |
+| L4 | Style tuned from real listening. What you asked to repeat was too terse. What you cut off was too long. |
+| L5 | Project vocabulary and conventions. |
 
-**Persona and speak-layer must be co-designed.** What the persona tells the agent to do is what
-makes the speak-layer's job easy. This is also the answer to the moat problem: **you control
-the tap.** Do not build a sophisticated filter for a firehose you can turn down at the source.
+### The three keys
+
+```
+<<SPEAK>>
+did:      what happened, in order, with the real names
+decision: a choice you made that I might disagree with, and why
+ask:      a question you need answered, with the options
+<<END>>
+```
+
+Failures, surprises and blockers go in `did` — they are part of what happened. Three keys
+rather than four because fewer keys means better compliance, and compliance across models
+matters for Claude Code and Antigravity later.
+
+### The target style
+
+> "I removed groupCommitsByHour from the grouping module to see what depended on it. Two tests
+> broke, the hourly grouping test failed and the summary test errored because it reaches that
+> function through formatDigest. So the dependency is not isolated. I put it back, all 20 tests
+> pass and the type check is clean."
+
+73 words, about 35 seconds spoken. Specific names, what broke and why, what it revealed, the
+outcome. A concrete example is worth more than a list of adjectives, so this sentence is in the
+contract itself.
+
+### Why this is safe
+
+Asking for a fuller *summary* is still only about the summary. It does not touch how the agent
+reasons, plans, or codes. A 90-word block costs perhaps 120 output tokens against a response
+already thousands long. That is noise, not degradation.
+
+The real risk is different: a longer block is generated text, so it can drift from what actually
+happened. We have ground truth — `file.edited` events say which files really changed — so nuncio
+can cross-check later. That is why the length is capped rather than left open.
+
+### What moved out of this track
+
+The old Track 7 mixed the agent's output with **nuncio's** own voice. Those are different
+things:
+
+- "Two voices", one for the agent's words and one for nuncio's own — now Track EAR L2.
+- "Hey Jay, it is done" — already Track ATTENTION L4.
+- Multiple agents with distinct voices — Track REACH.
+
+**You control the tap.** Do not build a sophisticated filter for a firehose you can turn down at
+the source. That is the answer to the moat problem, and it is why D-006 holds.
 
 ---
 

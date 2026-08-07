@@ -7,6 +7,89 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-08 — v1 built and verified end to end
+
+**Version:** v1
+**Type:** feature
+**Changed:**
+
+- `src/report-contract.ts` — replaces `src/persona.ts`. The `<<SPEAK>>` contract, its parser,
+  `stripSpeakBlock`, `renderForSpeech`. Three keys now: `did`, `decision`, `ask`.
+- `src/core/events.ts` — the six normalised event kinds and the `AgentAdapter` interface (D-017).
+- `src/core/state.ts` — the state machine. Pure, no I/O.
+- `src/core/report.ts` — builds the spoken report from the block, or the D-013 fallback.
+- `src/adapters/opencode.ts` — maps the OpenCode event stream onto normalised events.
+- `src/server/serve.ts` — HTTP and WebSocket, serves nuncio's own page (D-018).
+- `src/web/index.html` — the page. All audio lives here (D-012). Tones are generated with
+  WebAudio, so there are no sound files to ship.
+- `src/v1/main.ts` — wiring. `bun run v1`.
+- `src/v1/install-contract.ts` — writes `.nuncio/spoken-report.md` and adds it to
+  `instructions` in the project's `opencode.json` (D-022). Reversible with `--remove`.
+
+**Why:** v1 answers whether an ambient audio channel changes how work feels at the desk.
+
+**Result — verified, not assumed.** 67 tests pass, typecheck clean. Then run for real against a
+live `opencode serve`: installed the contract into the `standup` project, started `bun run v1`,
+drove a turn through `POST /session/:id/prompt_async`, and watched the whole path. nuncio's
+project check correctly detected the `standup` worktree. The page serves and carries the
+WebSocket. The final state was:
+
+```
+state: PENDING, ping: needs-you, source: block
+"I answered your question about why a CLI should use git log with the no pager flag.
+ ... One decision: I kept the answer to two sentences, as you asked.
+ Do you want an example command you can run to see the difference?"
+```
+
+`needsYou` was true because the block contained an `ask`. That is the whole loop.
+
+**A real bug the end-to-end run caught, which the unit tests did not.** The first run fell back
+even though the agent had written a block. The reducer treated every `session.status busy=true`
+as the start of a new turn and cleared the accumulated text. OpenCode emits `busy` once per
+step — the v0 capture has 204 status events for 12 turns — so the text was wiped moments before
+the turn finished. Every report would have been the fallback.
+
+Fixed: the accumulators are cleared when they are **consumed** in `turn.finished`, not when a
+turn appears to start. `busy` only clears them when the session changes. Four regression tests
+cover it.
+
+Worth noting for later: unit tests written from an assumed event order would not have found
+this. Only real traffic did.
+
+---
+
+## 2026-08-08 — "Persona" was the wrong idea; it is a style rule
+
+**Version:** v1
+**Type:** decision
+**Changed:** Added D-020 through D-024, superseded S-012 through S-014, rewrote Track 7 in
+`docs/02-tracks.md` from PERSONA to REPORT, and renamed the grid row in `docs/03-versions.md`.
+
+**Why:** The owner corrected a misreading. "Intern" and "junior developer" were an analogy for
+the **shape of the text**, not a character to install. The plan had drifted into injecting
+behavioural instructions — confirm understanding before acting, ask clarifying questions
+proactively — which is a layer on top of the model's intelligence and breaks the constraint
+about never changing the agent.
+
+**Result:**
+
+1. **No persona.** Only a style rule for the spoken summary. Nothing about how the agent works.
+2. **Three keys instead of four** (D-021). `done` invited "it is finished" and nothing more,
+   which is the exact failure being fixed. `did` invites a narrative. Blockers and surprises
+   belong in `did` because they are part of what happened.
+3. **Length scales with the work**, 25 to 90 words, hard cap 120. `Report.overLength` records
+   overruns, which is the tuning signal.
+4. **The one-week kill criterion is replaced** (D-023) by: over 10 finished turns, how many
+   times did the report mean you did not need the screen? Target 7 of 10.
+5. **"Tell me more" will read the buffer, not the CLI** (D-024). The detail is already on
+   screen. A round trip costs 5 to 20 seconds of silence and cannot be more accurate.
+
+The correction also made the project **smaller and safer**. nuncio no longer claims to improve
+the agent. It only asks for a spoken summary, which is far easier to defend and far more likely
+to behave the same on Claude Code and Antigravity.
+
+---
+
 ## 2026-08-08 — Multi-CLI adapter boundary, and the git/permissions root cause
 
 **Version:** v0

@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Voice presence layer for OpenCode coding sessions",
   "scripts": {
+    "v1": "bun run src/v1/main.ts",
+    "install-contract": "bun run src/v1/install-contract.ts",
     "listen": "bun run src/v0/log-events.ts",
     "analyze": "bun run src/v0/analyze.ts",
     "model-test": "bun run src/v0/model-test.ts",

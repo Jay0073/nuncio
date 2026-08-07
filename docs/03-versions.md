@@ -14,7 +14,7 @@ criterion**.
 | HANDOFF | L0 | L0 | L1 | L2 | L2 | L3 + L4 |
 | TURN-TAKING | L0 | L2 | L2 | L1 + L3 + L4 | L4 | L4 |
 | RECALL | L0 | L1 | L1 | L2 | L3 + L4 | L5 |
-| PERSONA | L1 | L1 | L2 | L4 | L4 | L5 |
+| REPORT | L1 | L1 | L2 | L4 | L4 | L5 |
 | REACH | L1 | L1 | L1 | L2 | L2 | L3 + L4 |
 
 ---
@@ -32,9 +32,9 @@ contains, whether `permission.asked` carries the option list, and what the text 
 look like.
 
 **Second job of v0:** test which available models reliably emit the `<<SPEAK>>` block. Send the
-persona to each model in the account and check whether the block appears, correctly formatted,
-ten times out of ten. Record the result in `docs/06-research.md`. This decides which model the
-project develops against, and it decides how important the fallback path is.
+report contract to each model in the account and check whether the block appears, correctly
+formatted, ten times out of ten. Record the result in `docs/06-research.md`. This decides which
+model the project develops against, and how important the fallback path is.
 
 **Exit condition:** the event log has been read, and at least one model emits the block
 reliably.
@@ -43,30 +43,41 @@ reliably.
 
 ## v1 — The Report
 
-**Size:** about one week. Desk only. Output only.
+**Size:** a few days of real use. Desk only. Output only. **Built.**
 
-The user keeps typing with Wispr Flow, unchanged. nuncio does not touch input at all.
+You keep typing in the TUI. nuncio does not touch your input at all.
 
 **What is in it:**
 
-- Persona injection with the `<<SPEAK>>` block contract
-- Daemon watches for `session.idle`, extracts the block
-- Fallback template when the block is missing
-- Three distinct ping sounds: done, needs you, error
-- A browser page on localhost that plays the ping and speaks the report on click
-- TTS via the browser's built-in speech synthesis. No TTS engine to install.
+- The report contract, installed per project through `opencode.json` → `instructions`
+- `bun run v1` — daemon watching the OpenCode event stream
+- Report built from the `<<SPEAK>>` block, with the D-013 fallback when it is missing
+- Three distinct tones: done, needs you, error — generated with WebAudio, no sound files
+- A browser page on localhost that plays the tone and speaks the report when you click Listen
+- Speech via the browser's built-in synthesis. No TTS engine to install.
+- Permission and question events already surface as "needs you" (answering them is v2)
 
 **The question it answers:** does an ambient audio channel change how I work at the desk?
 
-**The kill criterion:** use it for one week, then turn it off for two days. If you do not miss
-it, stop the project.
+**The measure — replaces the old one-week kill criterion.** See D-023.
+
+> Over 10 finished turns, how many times did the spoken report mean you did **not** need to look
+> at the screen? Target 7 out of 10.
+
+That is measurable in an afternoon instead of a week, and it tells us more than "do you miss
+it". Below 7, the problem is the contract, not the idea — adjust the length and the style rule
+in `src/report-contract.ts` and measure again.
 
 **How to make the test fair.** The known risk in this ordering is that v1 sits next to a
 keyboard, so it may feel pointless even if the idea is sound. The fix is a usage rule, not a
-feature. During the v1 week, after sending a prompt you must physically leave the terminal —
-open another window, start a test run, read something else. The value of v1 is only visible
-when you are not staring at the terminal. If you sit and watch, reading will always win, and
-you will have tested the wrong thing.
+feature. After sending a prompt, physically leave the terminal — open another window, start a
+test run, read something else. The value of v1 is only visible when you are not staring at the
+terminal. If you sit and watch, reading will always win, and you will have tested the wrong
+thing.
+
+**Known cost of v1.** The `<<SPEAK>>` block is visible in your terminal, because nuncio sits
+outside the CLI and cannot edit what the TUI prints. It is short, and it is useful for checking
+what nuncio received. Hiding it would need a plugin.
 
 ---
 
@@ -107,7 +118,7 @@ once", it kept going, you never touched the laptop.
 - Full prompts by voice from the phone
 - Typed and pasted input on the phone as a fallback
 - Repo vocabulary bias for Whisper
-- Persona becomes terser when the session is on the phone
+- The report contract asks for a shorter report when the session is on the phone
 
 Because audio already lives in the browser, this is largely the same page opened on a different
 device. You are moving a loop you already know works. You are not debugging audio, networking,
@@ -179,11 +190,11 @@ Nothing is deleted. Every idea has a track, a level, and a version.
 | General transcript Q&A, cascade routing | RECALL | L4 | v5 |
 | Cross-session memory | RECALL | L5 | v6 |
 | Voice bookmarks, "note that" | RECALL | L5 | v5 |
-| Intern persona injection | PERSONA | L1 | v1 |
-| Binary decision contract | PERSONA | L2 | v2 |
-| Mode-dependent persona (desk vs phone) | PERSONA | L3 | v3 |
-| Named identity, fixed voice, two voices | PERSONA | L4 | v4 |
-| Multiple agents, distinct voices | PERSONA | L5 | v6+ |
+| Report contract installed via opencode.json | REPORT | L1 | v1 |
+| Binary decision contract | REPORT | L2 | v2 |
+| Mode-dependent report length (desk vs phone) | REPORT | L3 | v3 |
+| Two voices, agent vs nuncio | EAR | L2 | v4 |
+| Multiple agents, distinct voices | REACH | L5 | v6+ |
 | Multiple concurrent sessions | REACH | L2 | v4 |
 | Claude Code adapter | REACH | L3 | v6 |
 | Codex, Gemini | REACH | L4 | v6 |
