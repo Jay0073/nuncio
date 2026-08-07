@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# runtime data
+*.log
+logs/
+events/
+captures/
+*.sqlite
+*.sqlite3
+*.db
+
+# models and audio assets (large, downloaded not committed)
+models/
+voices/
+*.onnx
+*.gguf
+*.bin
+*.wav
+*.mp3
+*.ogg
+
+# environment
+.env
+.env.local
+.env.*.local
+
+# editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# agent tooling
+.opencode/
+.claude/
+graphify-out/
