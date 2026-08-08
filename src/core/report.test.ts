@@ -16,13 +16,24 @@ describe("buildReport — the normal path", () => {
     expect(report.needsYou).toBe(true);
   });
 
-  test("flags a report that ran past the length cap", () => {
-    const long = "word ".repeat(200);
-    expect(buildReport(block(`did: ${long}`), []).overLength).toBeGreaterThan(120);
+  test("holds back the tail when a report runs past the budget", () => {
+    const long = Array.from({ length: 40 }, (_, i) => `Sentence ${i} here.`).join(" ");
+    const report = buildReport(block(`did: ${long}`), []);
+    expect(report.rest).not.toBe("");
+    expect(report.fullWords).toBeGreaterThan(45);
   });
 
-  test("does not flag a report inside the cap", () => {
-    expect(buildReport(block("did: Short and fine."), []).overLength).toBeUndefined();
+  test("a short report is never cut and offers nothing more", () => {
+    const report = buildReport(block("did: Short and fine."), []);
+    expect(report.rest).toBe("");
+    expect(report.fullWords).toBeUndefined();
+  });
+
+  test("the budget grows with the number of files changed", () => {
+    const long = Array.from({ length: 40 }, (_, i) => `Sentence ${i} here.`).join(" ");
+    const small = buildReport(block(`did: ${long}`), []);
+    const big = buildReport(block(`did: ${long}`), ["/a/1.ts", "/a/2.ts", "/a/3.ts", "/a/4.ts"]);
+    expect(big.text.length).toBeGreaterThan(small.text.length);
   });
 });
 

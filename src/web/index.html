@@ -170,11 +170,13 @@ const LABELS = {
 
 function render() {
   if (!state) return;
-  const waiting = state.waiting;
+  const queue = state.queue || [];
+  const waiting = queue[0] || null;
 
   const dot = document.getElementById("dot");
   dot.className = "dot " + (waiting && waiting.ping === "error" ? "error" : state.state);
-  document.getElementById("stateLabel").textContent = LABELS[state.state] || state.state;
+  document.getElementById("stateLabel").textContent =
+    (LABELS[state.state] || state.state) + (queue.length > 1 ? `  ·  ${queue.length - 1} more waiting` : "");
 
   // Ping once per new waiting item, never on a re-render.
   const key = waiting ? waiting.ping + "|" + waiting.report.text : null;
@@ -195,6 +197,8 @@ function render() {
 
   const report = waiting.report;
   const speaking = state.state === "SPEAKING";
+  // The rest is already in memory. Asking for it never goes back to the agent.
+  const hasMore = report.rest && report.rest.length > 0;
 
   body.innerHTML = `
     ${soundReady ? "" : `<div class="warn">Press “Enable sound” once so the browser lets nuncio play audio.</div>`}
@@ -202,19 +206,32 @@ function render() {
       <div class="label">${escapeHtml(sourceLabel(report.source))}</div>
       <div class="report">${escapeHtml(report.text)}</div>
       ${report.files.length ? `<div class="files">Changed: ${escapeHtml(report.files.join(", "))}</div>` : ""}
-      ${report.overLength ? `<div class="meta">Report ran long: ${report.overLength} words.</div>` : ""}
+      ${hasMore ? `<div class="meta">There is more — ${report.fullWords} words in total.</div>` : ""}
       ${report.source === "fallback" ? `<div class="meta">The agent wrote no summary block.</div>` : ""}
     </div>
     <div class="row" style="margin-top:16px">
       <button class="primary" id="listen">${speaking ? "Speaking…" : "Listen"}</button>
+      ${hasMore ? `<button id="more">More</button>` : ""}
       <button id="dismiss">Dismiss</button>
     </div>`;
 
   document.getElementById("listen").onclick = () => {
     if (!soundReady) enableSound();
     send("ui.open");
-    speak(report.text, () => send("ui.done"));
+    // Only offer the rest aloud when there actually is a rest.
+    const tail = hasMore ? " There is more, if you want it." : "";
+    speak(report.text + tail, () => { if (!hasMore) send("ui.done"); });
   };
+
+  if (hasMore) {
+    document.getElementById("more").onclick = () => {
+      if (!soundReady) enableSound();
+      const rest = report.rest;
+      send("ui.more");
+      speak(rest, () => send("ui.done"));
+    };
+  }
+
   document.getElementById("dismiss").onclick = () => {
     try { speechSynthesis.cancel(); } catch {}
     send("ui.done");

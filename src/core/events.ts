@@ -34,17 +34,22 @@ export type NormalizedEvent =
       permissionId: string;
       /** "bash", "edit", and so on. */
       tool: string;
-      /** One sentence, already written for speech. */
+      /** Already written for speech, in the first person, with detail scaled by risk. */
       summary: string;
       options: string[];
     }
   | { kind: "permission.answered"; sessionId: string; permissionId: string; reply: string }
-  /** A structured multiple-choice question from the agent. Distinct from a permission. */
+  /**
+   * A structured multiple-choice question from the agent. Distinct from a permission.
+   * Already phrased for speech by the adapter, including which option it recommends and why.
+   */
   | {
       kind: "question.asked";
       sessionId: string;
       questionId: string;
-      question: string;
+      /** The whole thing, ready to speak. */
+      spoken: string;
+      /** The bare labels, for the screen and for matching a spoken answer in v2. */
       options: string[];
     }
   | { kind: "question.answered"; sessionId: string; questionId: string }

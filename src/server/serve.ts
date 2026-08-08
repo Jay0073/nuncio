@@ -64,7 +64,7 @@ export function startServer(options: ServerOptions) {
       message(_ws, raw) {
         try {
           const parsed = JSON.parse(String(raw)) as UiEvent;
-          if (parsed.kind === "ui.open" || parsed.kind === "ui.done") {
+          if (parsed.kind === "ui.open" || parsed.kind === "ui.more" || parsed.kind === "ui.done") {
             options.onUiEvent(parsed);
           }
         } catch {

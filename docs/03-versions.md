@@ -81,6 +81,28 @@ what nuncio received. Hiding it would need a plugin.
 
 ---
 
+## v1.1 — what real use exposed
+
+**Built.** Four fixes, all from using v1 to build a real project rather than testing it.
+
+The v1 measure came back **below target**: the reports were good, but they did not remove the
+need to look at the screen. The idea did not fail — four specific things did.
+
+| What was wrong | Fix | Decision |
+|---|---|---|
+| Permissions read the raw command aloud. Up to 887 characters, about two minutes of spoken punctuation. | Describe them instead. First person, detail scaled by risk, real paths named. Now 69 to 257 characters. | D-026 |
+| Spoken questions lost their options. | They were not lost — the waiting item was wiped by the next `busy` event, and `busy` fires about 17 times per turn. Items that block the agent now survive, and there is a queue rather than one slot. | D-028 |
+| Every report was about the same length, and the 120-word cap did nothing. Real blocks ran to 431 words. | The daemon enforces a budget that scales with the work: 45 / 70 / 100 words. The remainder is held and offered only when something was actually cut. | D-025 |
+| Reports missed important things, and padded with "I answered your question". | Length now follows **what was asked**, not how long the work took. Explanation turns give the answer itself. No narrating what kind of turn it was. Do not compress what is already brief. | D-020 |
+
+Also pulled forward: questions are asked like a colleague would ask them, with a recommendation
+and a reason (D-027).
+
+**Measure again after this.** Same target: over 10 finished turns, how many times did the
+report mean you did not need the screen? Target 7 out of 10.
+
+---
+
 ## v2 — The Unblock
 
 **Size:** about one week. Desk only. The loop closes.

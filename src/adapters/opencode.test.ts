@@ -46,7 +46,7 @@ describe("translate", () => {
     ).toEqual([{ kind: "file.edited", sessionId: null, path: "C:\\p\\standup\\package.json" }]);
   });
 
-  test("a bash permission speaks the actual command", () => {
+  test("a bash permission speaks in the first person and offers the options", () => {
     const [event] = translate({
       type: "permission.asked",
       properties: {
@@ -60,8 +60,33 @@ describe("translate", () => {
       kind: "permission.requested",
       permissionId: "per_1",
       tool: "bash",
-      summary: "It wants to run: Get-ChildItem -Force | Select-Object Name.",
+      summary:
+        "I want to run: Get-ChildItem -Force | Select-Object Name. " +
+        "Allow once, allow for this session, or deny?",
     });
+  });
+
+  test("a long destructive command is described, not read out", () => {
+    // The real 905-character case. Reading it aloud is two minutes of spoken punctuation.
+    const [event] = translate({
+      type: "permission.asked",
+      properties: {
+        id: "per_9",
+        sessionID: "ses_1",
+        permission: "bash",
+        metadata: {
+          command:
+            '$base = "C:\\Users\\jay\\AppData\\Local\\Temp\\opencode\\standup-e2e"; ' +
+            "if (Test-Path $base) { Remove-Item -Recurse -Force $base }; " +
+            'New-Item -ItemType Directory -Path "$base\\alpha" -Force',
+        },
+      },
+    });
+    const summary = (event as { summary: string }).summary;
+    expect(summary).toStartWith("I want to run a 3-step command");
+    expect(summary).toContain("That is destructive.");
+    expect(summary).not.toContain("AppData");
+    expect(summary.length).toBeLessThan(260);
   });
 
   test("an edit permission speaks the file name, not the whole path", () => {
@@ -74,7 +99,9 @@ describe("translate", () => {
         metadata: { filepath: "C:\\Users\\jay\\Documents\\projects\\standup\\package.json" },
       },
     });
-    expect(event).toMatchObject({ summary: "It wants to edit package.json." });
+    expect(event).toMatchObject({
+      summary: "I want to edit package.json. Allow once, allow for this session, or deny?",
+    });
   });
 
   test("permission.replied uses requestID, not id", () => {
@@ -86,7 +113,9 @@ describe("translate", () => {
     ).toEqual([{ kind: "permission.answered", sessionId: "ses_1", permissionId: "per_1", reply: "once" }]);
   });
 
-  test("a structured question keeps its option labels but drops (Recommended)", () => {
+  test("a question is asked the way a colleague would ask it", () => {
+    // Not a bare list. The event marks a recommended option and carries a description per
+    // option, so nuncio can say what it would do and why before naming the alternatives.
     const [event] = translate({
       type: "question.asked",
       properties: {
@@ -96,8 +125,11 @@ describe("translate", () => {
           {
             question: "How should the CLI find the repositories?",
             options: [
-              { label: "Scan current directory (Recommended)" },
-              { label: "Explicit paths as arguments" },
+              {
+                label: "Scan current directory (Recommended)",
+                description: "Recursively find .git folders under the working directory. Works well.",
+              },
+              { label: "Explicit paths as arguments", description: "User passes repo paths." },
             ],
           },
         ],
@@ -107,7 +139,10 @@ describe("translate", () => {
       kind: "question.asked",
       sessionId: "ses_1",
       questionId: "que_1",
-      question: "How should the CLI find the repositories?",
+      spoken:
+        "How should the CLI find the repositories? I would go with Scan current directory — " +
+        "Recursively find .git folders under the working directory. " +
+        "The others are Explicit paths as arguments. Which one?",
       options: ["Scan current directory", "Explicit paths as arguments"],
     });
   });

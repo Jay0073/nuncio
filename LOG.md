@@ -7,6 +7,65 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — v1.1: four fixes from real use
+
+**Version:** v1.1
+**Type:** fix
+**Changed:**
+
+- `src/core/budget.ts` (new) — the speech budget. Trims on a sentence boundary, keeps the rest.
+- `src/adapters/describe.ts` (new) — permission and question phrasing.
+- `src/core/state.ts` — a queue of waiting items instead of one slot.
+- `src/core/report.ts` — reports now carry `rest` and `fullWords`.
+- `src/report-contract.ts` — length rules by turn type; no meta-narration; do not compress what
+  is already brief; first person.
+- `src/web/index.html` — a **More** button, shown only when something was held back.
+
+**Why:** The owner used v1 to build a real project rather than testing it. The measure came back
+below target — the reports were good, but they did not remove the need to look at the screen.
+
+**Result — the four things, and what the data said:**
+
+1. **Permissions were unusable by ear.** Measured across the capture, commands ran 8 to 887
+   characters; the longest was a PowerShell pipeline of quoted Windows paths. Now described
+   rather than read: **69 to 257 characters, median 99**. Replayed all 51 real permissions to
+   confirm. In the first person, with detail scaled by risk, and naming the real paths a
+   destructive command touches.
+2. **Spoken questions lost their options.** They were never lost — the waiting item was cleared
+   by the next `busy` event, and `busy` fires about 17 times per turn. Items that block the
+   agent now survive it. The capture also shows `permission.asked` back-to-back, so a single
+   slot was dropping all but the last; there is now a queue.
+3. **The 120-word cap did nothing.** Real blocks ran 10 to 431 words. The daemon now enforces a
+   budget that scales with the work — 45 / 70 / 100 words by files changed — and holds the rest.
+   "There is more" appears only when something was actually cut.
+4. **Reports padded and missed things.** The v1 report literally opened with "I answered your
+   question about... I did not run any tools" — two sentences of waste. Length now follows what
+   was asked rather than how long the work took, and an explanation turn gives the answer
+   itself instead of describing that it answered.
+
+Also: questions are now asked the way a colleague asks — recommendation, reason, then the
+alternatives. The event already carried a description per option and marked the recommended
+one; v1 threw both away.
+
+**Bugs found while writing this, worth remembering:**
+
+- `.git folders` and `index.ts` were being cut in half, because a full stop was treated as a
+  sentence end regardless of what followed. Both sentence splitters now require whitespace or
+  end-of-string after the punctuation.
+- The destructive-risk pattern fired on `git log --pretty=format:%h`, because `format` was a
+  bare word. A false "that is destructive" trains you to ignore the warning, which is worse
+  than not warning. Patterns are narrow now.
+- Unexpanded shell variables were being spoken as paths. "$base/alpha" tells you nothing about
+  which real folder is at risk, so they are skipped.
+
+**Verified:** 115 tests pass, typecheck clean, and all 51 real permissions plus all 6 real
+questions from the capture were replayed through the new code.
+
+**Still to do by the owner:** re-install the contract (it changed), restart the server, start a
+new session, and take the measure again.
+
+---
+
 ## 2026-08-08 — v1 built and verified end to end
 
 **Version:** v1

@@ -49,7 +49,31 @@ Name real things. Say which function, which file, which test. "Two tests broke" 
 Include what came up along the way: what failed, what surprised you, what you had to work
 around. That belongs in \`did\` — it is part of what happened.
 
-This is the target:
+## How much to say
+
+Length follows **what I asked for**, not how long you worked.
+
+- **I asked a question, or asked you to explain, review or compare something.**
+  The report IS the answer, spoken. Do not describe that you answered — give the answer
+  itself. This is usually your longest report.
+
+- **I asked you to change something.**
+  What you changed, what broke or surprised you, what you decided, and where it ended up.
+
+- **The turn was small.** One file read, one small edit, a yes or no.
+  One sentence.
+
+**Never narrate the kind of turn it was.** Do not write "I answered your question", "I did not
+run any tools", "As requested", "Here is what I did". Start with the content.
+
+**Do not compress what is already short.** If your on-screen response was already brief, the
+report should carry nearly all of it, rewritten to be heard rather than read. Summarising a
+summary loses the specifics, and the specifics are the part worth hearing.
+
+**Put the most important thing first.** A listener cannot skim. If only the first sentence gets
+heard, it should still be the sentence that matters most.
+
+This is the target for a change-something turn:
 
   did: I removed groupCommitsByHour from the grouping module to see what depended on it.
   Two tests broke, the hourly grouping test failed and the summary test errored because it
@@ -65,8 +89,8 @@ This is the target:
 - File names only, never full paths. Say "package.json", not the whole directory.
 - Numbers instead of adjectives. "20 tests pass", not "the tests pass nicely".
 - No padding. Never "I have successfully completed" or "Let me explain what I did".
-- Match the length to the size of the work. Under 25 words for a small turn. 40 to 90 words
-  for a real one. Never more than ${MAX_WORDS}.
+- Write in the first person. You and the voice reading this out are the same colleague.
+- Stay under ${MAX_WORDS} words. Only an explanation turn should come close to that.
 
 ## Rules
 

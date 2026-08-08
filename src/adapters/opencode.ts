@@ -11,6 +11,13 @@
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import type { AgentAdapter, AgentCapabilities, Emit, NormalizedEvent } from "../core/events.ts";
 import { fileName } from "../core/report.ts";
+import {
+  describeBash,
+  describeEdit,
+  describeQuestion,
+  permissionOptions,
+  type QuestionOption,
+} from "./describe.ts";
 
 type Client = ReturnType<typeof createOpencodeClient>;
 
@@ -135,13 +142,14 @@ export function translate(raw: RawEvent): NormalizedEvent[] {
       const permissionId = typeof p.id === "string" ? p.id : "";
       const tool = typeof p.permission === "string" ? p.permission : "unknown";
       if (!permissionId || !sessionId) return [];
+      const metadata = p.metadata as Record<string, unknown> | undefined;
       return [
         {
           kind: "permission.requested",
           sessionId,
           permissionId,
           tool,
-          summary: describePermission(tool, p.metadata as Record<string, unknown> | undefined),
+          summary: `${describePermission(tool, metadata)} ${permissionOptions()}`.trim(),
           options: ["once", "always", "reject"],
         },
       ];
@@ -155,24 +163,32 @@ export function translate(raw: RawEvent): NormalizedEvent[] {
       return [{ kind: "permission.answered", sessionId, permissionId, reply }];
     }
 
-    // A structured multiple-choice question. Distinct from a permission, and already carries
-    // labelled options, which is close to ideal for speech.
+    // A structured multiple-choice question. Distinct from a permission. Each option carries a
+    // label AND a description, and the recommended one is marked — so nuncio can ask the way a
+    // colleague would rather than reading a bare list.
     case "question.asked": {
       const questionId = typeof p.id === "string" ? p.id : "";
       const questions = p.questions as
-        | { question?: string; options?: { label?: string }[] }[]
+        | { question?: string; options?: { label?: string; description?: string }[] }[]
         | undefined;
       const first = questions?.[0];
       if (!questionId || !sessionId || !first?.question) return [];
+
+      const options: QuestionOption[] = (first.options ?? [])
+        .map((o) => ({
+          label: stripRecommended(o.label ?? ""),
+          description: o.description,
+          recommended: isRecommended(o.label ?? ""),
+        }))
+        .filter((o) => o.label !== "");
+
       return [
         {
           kind: "question.asked",
           sessionId,
           questionId,
-          question: first.question,
-          options: (first.options ?? [])
-            .map((o) => stripRecommended(o.label ?? ""))
-            .filter(Boolean),
+          spoken: describeQuestion(first.question, options),
+          options: options.map((o) => o.label),
         },
       ];
     }
@@ -205,20 +221,29 @@ export function translate(raw: RawEvent): NormalizedEvent[] {
   }
 }
 
-/** Turn a permission request into one sentence worth hearing. */
+/** Turn a permission request into something worth hearing. See describe.ts. */
 function describePermission(tool: string, metadata: Record<string, unknown> | undefined): string {
   if (tool === "bash" && typeof metadata?.command === "string") {
-    return `It wants to run: ${metadata.command}.`;
+    return describeBash(metadata.command);
   }
   if (tool === "edit" && typeof metadata?.filepath === "string") {
-    return `It wants to edit ${fileName(metadata.filepath)}.`;
+    return describeEdit(
+      fileName(metadata.filepath),
+      typeof metadata.diff === "string" ? metadata.diff : undefined,
+    );
   }
-  return `It needs permission for ${tool}.`;
+  return `I need permission for ${tool}.`;
 }
 
-/** Option labels carry "(Recommended)". Spoken, that is noise. */
+const RECOMMENDED = /\s*\((recommended|default)\)\s*$/i;
+
+/** Option labels carry "(Recommended)". Spoken that is noise, but the fact is useful. */
+function isRecommended(label: string): boolean {
+  return RECOMMENDED.test(label);
+}
+
 function stripRecommended(label: string): string {
-  return label.replace(/\s*\((recommended|default)\)\s*$/i, "").trim();
+  return label.replace(RECOMMENDED, "").trim();
 }
 
 function sleep(ms: number): Promise<void> {

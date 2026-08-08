@@ -45,11 +45,11 @@ const server = startServer({
 
 function log(input: Input, next: NuncioState): void {
   const time = new Date().toLocaleTimeString();
-  const detail =
-    next.waiting && input.kind === "turn.finished"
-      ? `  [${next.waiting.report.source}] ${next.waiting.report.text.slice(0, 90)}`
-      : "";
-  console.log(`${time}  ${input.kind.padEnd(22)} -> ${next.state}${detail}`);
+  const head = next.queue[0];
+  const queued = next.queue.length > 1 ? ` (+${next.queue.length - 1} queued)` : "";
+  const detail = head ? `  [${head.report.source}] ${head.report.text.slice(0, 80)}` : "";
+  const more = head?.report.rest ? `  (+${head.report.fullWords} words held)` : "";
+  console.log(`${time}  ${input.kind.padEnd(22)} -> ${next.state}${queued}${detail}${more}`);
 }
 
 async function main(): Promise<void> {

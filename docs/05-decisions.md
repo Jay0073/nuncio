@@ -219,6 +219,72 @@ more detail on what was just said.
 Principle to hold: **the first report should be right most of the time.** If "tell me more" is
 needed every turn, the budget is wrong. Fix the budget, do not add a crutch.
 
+### D-025 — The budget is enforced by the daemon, not by the prompt
+**Status:** active
+A cap that lives only in an instruction is not a cap. Real blocks ran from 10 to 431 words
+against a stated maximum of 120, and nuncio spoke whatever it was handed.
+
+The daemon now trims to a budget on a sentence boundary and keeps the remainder. The budget
+scales with the work actually done, using the `file.edited` events already in hand: 45 words
+for a turn that wrote nothing, 70 for one to three files, 100 for four or more.
+
+"There is more" is offered **only when something was actually cut**. A short report is never
+trimmed and never offers more.
+
+Asking for more reads the remainder from memory. It never calls the agent (D-024), so it costs
+nothing, takes no time, and cannot drift from what was written.
+
+Track EAR L3, pulled forward from v4 because real use showed the cap was doing nothing.
+
+### D-026 — Permissions are described, not read aloud
+**Status:** active
+Measured across a real capture, permission commands ran from 8 to 887 characters. The longest
+was a PowerShell pipeline of quoted Windows paths — roughly two minutes of spoken punctuation.
+After describing them: 69 to 257 characters, median 99.
+
+Three rules:
+
+1. **First person.** "I want to run", never "It wants to run". nuncio and the agent are one
+   colleague, not a tool narrating another tool.
+2. **Detail scales with risk.** In real use most permissions are auto-approved and only the
+   dangerous ones reach the user's ears, so those deserve more words — including which real
+   paths are touched. Unexpanded shell variables are skipped; "$base/alpha" tells you nothing.
+3. **Short harmless commands are read out as they are.** Hearing the real command beats hearing
+   a paraphrase of it.
+
+Risk patterns are deliberately narrow. A false "that is destructive" trains the user to ignore
+the warning, which is worse than not warning. An early version fired on
+`git log --pretty=format:%h`.
+
+Track TURN-TAKING L3, pulled forward from v4. v2 is answering permissions by voice, and you
+cannot answer what you cannot understand.
+
+### D-027 — Questions are asked the way a colleague asks
+**Status:** active
+Not "here is a question, here are three options". The `question.asked` event already carries a
+description per option and marks the recommended one, so nuncio says what it would do and why,
+then names the alternatives:
+
+> "How should the CLI find the repositories? I would go with Scan current directory —
+> recursively find .git folders under the working directory. The others are Explicit paths as
+> arguments or Config file. Which one?"
+
+Track EAR L2, pulled into v1.1 because the data was already there and cost nothing.
+
+### D-028 — A queue of waiting items, not one slot
+**Status:** active
+Two bugs from real use, both caused by holding a single waiting item.
+
+1. `status busy=true` cleared it, and OpenCode fires `busy` roughly 17 times per turn. A spoken
+   question or permission was wiped moments after arriving — which is why questions seemed to
+   lose their options in v1. Items that **block the agent** now survive `busy`. A stale report
+   is still cleared, because new work makes it stale.
+2. The capture shows `permission.asked` immediately followed by another. Several can be in
+   flight, and a single slot silently dropped all but the last.
+
+Reports queue **behind** anything blocking the agent, because an unanswered permission has
+stopped the work and matters more than a summary.
+
 ---
 
 ## Superseded decisions

@@ -82,6 +82,25 @@ nuncio never speaks on its own. When you are ready, click **Listen** and it read
 the agent wrote. If the agent wrote no summary, it says so and tells you to check the screen —
 it will never read the raw response aloud.
 
+Long reports are cut to a budget that scales with the work done — 45, 70 or 100 words by how
+many files changed. When something is held back, a **More** button appears and the report ends
+with "there is more, if you want it". **More reads from memory.** It never goes back to the
+agent, so it costs nothing and takes no time.
+
+Permissions and questions are described rather than read out. A 900-character shell command
+becomes "I want to run a 19-step command that deletes files and creates folders. That is
+destructive. It touches standup/build. Check the screen before allowing it."
+
+## After changing the contract
+
+`src/report-contract.ts` is sent to the agent, so changing it needs three steps:
+
+```bash
+bun run install-contract -- C:\path\to\your\project   # rewrite the file
+# restart 'opencode serve'                            # reload the config
+# start a NEW session in the TUI                      # old sessions keep old instructions
+```
+
 The `<<SPEAK>>` block is visible in your terminal. nuncio sits outside the CLI and cannot edit
 what the TUI prints. It is short, and it is a useful check on what nuncio received.
 

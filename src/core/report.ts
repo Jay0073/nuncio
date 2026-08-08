@@ -11,36 +11,41 @@
  * at the screen is better than two minutes of markdown read aloud.
  */
 
-import { MAX_WORDS, parseSpeakBlock, renderForSpeech, wordCount } from "../report-contract.ts";
+import { parseSpeakBlock, renderForSpeech, wordCount } from "../report-contract.ts";
+import { budgetFor, trimToBudget } from "./budget.ts";
 
 export interface Report {
+  /** What gets spoken now. Already trimmed to the budget. */
   text: string;
+  /** What was held back. Empty when nothing was cut. "More" reads this from memory (D-024). */
+  rest: string;
   source: "block" | "fallback" | "permission" | "question" | "error";
   /** True when the agent is stopped until you answer. Drives the "needs you" ping. */
   needsYou: boolean;
   /** File names touched this turn. Shown on screen, not spoken. */
   files: string[];
-  /** Set when the block ran past the length cap. Useful signal while tuning the contract. */
-  overLength?: number;
+  /** The block's full length in words, when it ran past the budget. Tuning signal. */
+  fullWords?: number;
 }
 
 export function buildReport(text: string | null, filePaths: string[]): Report {
-  const files = filePaths.map(fileName);
+  const files = [...new Set(filePaths.map(fileName))];
 
   const block = text ? parseSpeakBlock(text) : null;
   if (block) {
-    const spoken = renderForSpeech(block);
-    const words = wordCount(spoken);
+    const full = renderForSpeech(block);
+    const { spoken, rest } = trimToBudget(full, budgetFor(files.length));
     return {
       text: spoken,
+      rest,
       source: "block",
       needsYou: block.ask !== undefined,
       files,
-      ...(words > MAX_WORDS ? { overLength: words } : {}),
+      ...(rest ? { fullWords: wordCount(full) } : {}),
     };
   }
 
-  return { text: fallbackText(files), source: "fallback", needsYou: false, files };
+  return { text: fallbackText(files), rest: "", source: "fallback", needsYou: false, files };
 }
 
 /**
@@ -54,15 +59,13 @@ function fallbackText(files: string[]): string {
     return "Finished, but no summary was given and no files changed. Check the screen.";
   }
 
-  const unique = [...new Set(files)];
-
-  if (unique.length === 1) {
-    return `Finished. Changed ${unique[0]}. No summary was given, so check the screen.`;
+  if (files.length === 1) {
+    return `Finished. Changed ${files[0]}. No summary was given, so check the screen.`;
   }
 
-  const named = unique.slice(0, 3).join(", ");
-  const rest = unique.length > 3 ? `, and ${unique.length - 3} more` : "";
-  return `Finished. Changed ${unique.length} files: ${named}${rest}. No summary was given, so check the screen.`;
+  const named = files.slice(0, 3).join(", ");
+  const more = files.length > 3 ? `, and ${files.length - 3} more` : "";
+  return `Finished. Changed ${files.length} files: ${named}${more}. No summary was given, so check the screen.`;
 }
 
 /** Full paths are unpleasant to listen to. Windows and POSIX separators both appear. */
