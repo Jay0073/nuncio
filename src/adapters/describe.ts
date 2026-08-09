@@ -31,21 +31,111 @@ const RISK_PATTERNS: [RiskTier, RegExp][] = [
   ],
 ];
 
-/** What a command does, in plain words. First match per group wins. */
-const ACTIONS: [RegExp, string][] = [
-  [/\b(rm|remove-item|rmdir|del)\b/i, "deletes files"],
-  [/\b(new-item|mkdir)\b/i, "creates folders"],
-  [/\b(set-content|out-file|touch|copy-item)\b/i, "writes files"],
-  [/\b(bun|npm|pnpm|yarn)\s+(test|run\s+test)\b/i, "runs the tests"],
-  [/\b(bun|npm|pnpm|yarn)\s+(add|install|i)\b/i, "installs packages"],
-  [/\bgit\s+init\b/i, "creates a git repository"],
-  [/\bgit\s+(commit)\b/i, "commits"],
-  [/\bgit\s+push\b/i, "pushes to the remote"],
-  [/\bgit\s+(log|status|diff|show)\b/i, "reads git history"],
-  [/\b(tsc|typecheck)\b/i, "runs the type checker"],
-  [/\b(get-childitem|ls|dir|get-content|cat|type)\b/i, "reads files"],
-  [/\b(curl|wget|invoke-webrequest|invoke-restmethod)\b/i, "makes a network request"],
+/**
+ * What one step of a command actually does, with its subject.
+ *
+ * "a six-step command" tells you nothing. You need to hear *what* it does — "commit with the
+ * message fix date parsing" — or you cannot decide whether to allow it. Each pattern captures
+ * the part that carries the meaning and puts it in the sentence.
+ *
+ * First match wins, so specific patterns go above general ones.
+ */
+const STEP_PATTERNS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/git\s+commit\b[^"']*["']([^"']{1,80})["']/i, (m) => `commit with the message, ${m[1]}`],
+  [/git\s+commit\b/i, () => "make a commit"],
+  [/git\s+push\s+(\S+)\s+(\S+)/i, (m) => `push ${m[2]} to ${m[1]}`],
+  [/git\s+push\b/i, () => "push to the remote"],
+  [/git\s+(?:checkout|switch)\s+-b\s+(\S+)/i, (m) => `create a branch called ${m[1]}`],
+  [/git\s+(?:checkout|switch)\s+(\S+)/i, (m) => `switch to ${m[1]}`],
+  [/git\s+init\b/i, () => "set up a git repository here"],
+  [/git\s+add\b/i, () => "stage the changes"],
+  [/git\s+reset\s+--hard\b/i, () => "throw away all uncommitted changes"],
+  [/git\s+(?:log|status|diff|show)\b/i, () => "read the git history"],
+
+  [/\b(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?test\b\s*(\S+)?/i, (m) =>
+    m[1] && !m[1].startsWith("-") ? `run the tests in ${named(m[1], "")}` : "run the tests"],
+  [/\b(?:bun|npm|pnpm|yarn)\s+(?:add|install|i)\s+(?!-)(\S+)/i, (m) =>
+    `install ${named(m[1], "a package")}`],
+  [/\b(?:bun|npm|pnpm|yarn)\s+(?:add|install|i)\b/i, () => "install the dependencies"],
+  [/\b(?:bun|npm|pnpm|yarn)\s+run\s+(\S+)/i, (m) => runScriptPhrase(m[1])],
+  [/\b(?:tsc|typecheck)\b/i, () => "run the type checker"],
+
+  [/(?:rm|remove-item|rmdir|del)\b[^"']*["']([^"']{1,90})["']/i, (m) =>
+    `delete ${named(m[1], "a folder")}`],
+  [/(?:rm|remove-item|rmdir)\s+(?:-\S+\s+)*(\S+)/i, (m) => `delete ${named(m[1], "a folder")}`],
+  // `-Path` first. Without it the generic pattern below picks up the value of an earlier flag:
+  // `New-Item -ItemType Directory -Path $fresh` came out as "create the folder Directory".
+  [/(?:new-item|mkdir)\b[^;]*?-path\s+["']?([^"',;\s]+)/i, (m) =>
+    createPhrase(m[1])],
+  [/(?:new-item|mkdir)\b[^"']*["']([^"']{1,90})["']/i, (m) =>
+    createPhrase(m[1])],
+  [/(?:new-item|mkdir)\s+(?:-\S+\s+)*(\S+)/i, (m) => createPhrase(m[1])],
+  [/(?:set-content|out-file|copy-item|touch)\b[^"']*["']([^"']{1,90})["']/i, (m) =>
+    `write ${named(m[1], "a file")}`],
+  [/\b(?:set-content|out-file|copy-item|touch)\b/i, () => "write a file"],
+
+  [/(?:test-path)\b/i, () => "check whether a path exists"],
+  [/\b(?:get-content|cat|type)\s+(\S+)/i, (m) => `read ${named(m[1], "a file")}`],
+  [/\b(?:get-childitem|ls|dir)\b/i, () => "list the files here"],
+  [/\b(?:curl|wget|invoke-webrequest|invoke-restmethod)\s+(\S+)/i, (m) =>
+    `fetch ${host(m[1]!)} over the network`],
+  [/\b(?:curl|wget|invoke-webrequest|invoke-restmethod)\b/i, () => "make a network request"],
 ];
+
+/** The name if it is worth saying, otherwise a generic word. */
+function named(value: string | undefined, fallback: string): string {
+  return subject(value) ?? fallback;
+}
+
+/**
+ * Phrases where the fallback needs different wording, not just a different noun.
+ *
+ * Substituting "a folder" into "create the folder ..." produced "create the folder a folder".
+ */
+function createPhrase(value: string | undefined): string {
+  const name = subject(value);
+  return name ? `create the folder ${name}` : "create a folder";
+}
+
+function runScriptPhrase(value: string | undefined): string {
+  const name = subject(value);
+  return name ? `run the ${name} script` : "run a script";
+}
+
+/**
+ * A speakable name for a path or argument, or null when naming it would be meaningless.
+ *
+ * Two things it handles:
+ *
+ * - **Shell variables are not expanded yet.** "delete base" — from `$base` — tells the listener
+ *   nothing at all, so a value that is only a variable is dropped and the caller falls back to
+ *   a generic word.
+ * - **Full paths are unbearable spoken.** Only the last segment is kept.
+ */
+function subject(value: string | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value.replace(/^["']|["']$/g, "").trim();
+  const parts = cleaned
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .filter((part) => !/^[$%]/.test(part));
+  const last = parts.at(-1);
+  return last && last.length > 0 ? last : null;
+}
+
+function host(url: string): string {
+  const match = /^https?:\/\/([^/\s"']+)/i.exec(url);
+  return match ? match[1]! : (subject(url) ?? "a remote address");
+}
+
+/** Describe one step, or null when nothing recognisable is in it. */
+export function describeStep(step: string): string | null {
+  for (const [pattern, render] of STEP_PATTERNS) {
+    const match = pattern.exec(step);
+    if (match) return render(match);
+  }
+  return null;
+}
 
 export function riskOf(command: string): RiskTier {
   let tier: RiskTier = "read-only";
@@ -63,11 +153,12 @@ export function steps(command: string): string[] {
     .filter(Boolean);
 }
 
-/** Up to three plain-English actions, in the order they appear. */
+/** What each step of the command does, in order, without repeats. Up to three. */
 export function actionsOf(command: string): string[] {
   const found: string[] = [];
-  for (const [pattern, label] of ACTIONS) {
-    if (pattern.test(command) && !found.includes(label)) found.push(label);
+  for (const step of steps(command)) {
+    const phrase = describeStep(step);
+    if (phrase && !found.includes(phrase)) found.push(phrase);
     if (found.length === 3) break;
   }
   return found;
@@ -119,13 +210,25 @@ export function describeBash(command: string): string {
   }
 
   const actions = actionsOf(trimmed);
-  const what = actions.length ? ` that ${asList(actions)}` : "";
-  const size = parts.length > 1 ? `a ${parts.length}-step command` : "a long command";
 
-  const detail =
-    tier === "destructive" ? namePaths(pathsIn(trimmed)) : "";
+  // Say what it does. "A six-step command" tells you nothing you can decide on.
+  let opening: string;
+  if (actions.length === 0) {
+    opening =
+      parts.length > 1
+        ? `I want to run ${parts.length} commands. I cannot summarise them, so please look at the screen.`
+        : `I want to run a long command. Please look at the screen.`;
+  } else if (actions.length === 1) {
+    opening = `I want to ${actions[0]}.`;
+  } else {
+    const extra = parts.length > actions.length ? `, and ${parts.length - actions.length} more` : "";
+    // A sequence, not a choice. "delete build or create alpha" would be a different request.
+    opening = `I want to ${asSequence(actions)}${extra}.`;
+  }
 
-  return join([`I want to run ${size}${what}.`, RISK_SENTENCE[tier], detail]);
+  const detail = tier === "destructive" ? namePaths(pathsIn(trimmed)) : "";
+
+  return join([opening, RISK_SENTENCE[tier], detail]);
 }
 
 function namePaths(paths: string[]): string {
@@ -203,10 +306,18 @@ function firstSentence(text: string): string {
   return (match ? match[0] : trimmed).replace(/[.!?]+$/, "").trim();
 }
 
+/** Alternatives: "a, b or c". Use for options the listener chooses between. */
 function asList(items: string[]): string {
   if (items.length === 0) return "";
   if (items.length === 1) return items[0]!;
   return `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+}
+
+/** Steps in order: "a, then b, then c". Use for things that happen one after another. */
+function asSequence(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0]!;
+  return items.join(", then ");
 }
 
 function plural(n: number, word: string): string {

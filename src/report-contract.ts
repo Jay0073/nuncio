@@ -149,6 +149,9 @@ This is the target for a change-something turn:
 
 ## How to write it
 
+- **Simple English. I am not a native speaker, and I am listening, not reading — I cannot go
+  back over a sentence I missed.** Use common words. Say "use" not "utilise", "so" not
+  "consequently", "start" not "initiate". One idea per sentence. No idioms.
 - Plain spoken English. Short sentences. Facts in the order they happened.
 - No markdown, no code blocks, no bullet points, no backticks.
 - File names only, never full paths. Say "package.json", not the whole directory.

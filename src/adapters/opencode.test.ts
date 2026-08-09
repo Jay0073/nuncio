@@ -66,8 +66,9 @@ describe("translate", () => {
     });
   });
 
-  test("a long destructive command is described, not read out", () => {
-    // The real 905-character case. Reading it aloud is two minutes of spoken punctuation.
+  test("a long destructive command is described by what it does", () => {
+    // The real 905-character case. Reading it aloud is two minutes of spoken punctuation, and
+    // "a 3-step command" is no better — you cannot approve what you cannot understand.
     const [event] = translate({
       type: "permission.asked",
       properties: {
@@ -83,10 +84,11 @@ describe("translate", () => {
       },
     });
     const summary = (event as { summary: string }).summary;
-    expect(summary).toStartWith("I want to run a 3-step command");
+    expect(summary).toStartWith("I want to");
+    expect(summary).toContain("create the folder alpha");
     expect(summary).toContain("That is destructive.");
     expect(summary).not.toContain("AppData");
-    expect(summary.length).toBeLessThan(260);
+    expect(summary.length).toBeLessThan(280);
   });
 
   test("an edit permission speaks the file name, not the whole path", () => {

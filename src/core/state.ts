@@ -38,19 +38,34 @@ export interface NuncioState {
    * silently dropped all but the last.
    */
   queue: Waiting[];
+  /**
+   * The last few items that have been dealt with, newest first.
+   *
+   * Without this there is no way to hear a report a second time — it was spoken once and then
+   * gone. "Say that again" is a normal thing to want, especially when listening rather than
+   * reading, and doubly so in a second language.
+   */
+  history: Waiting[];
   /** Files written during the current turn. Ground truth for the fallback report. */
   filesThisTurn: string[];
   /** The assistant's latest text for the current turn. */
   lastText: string | null;
+  /** When the current turn began. Used to say how long it has been running. */
+  turnStartedAt: number | null;
   lastEventAt: number | null;
 }
+
+/** Enough to go back over a few turns, not so many that it becomes a transcript. */
+const HISTORY_LIMIT = 6;
 
 export const initialState: NuncioState = {
   state: "IDLE",
   sessionId: null,
   queue: [],
+  history: [],
   filesThisTurn: [],
   lastText: null,
+  turnStartedAt: null,
   lastEventAt: null,
 };
 
@@ -104,7 +119,12 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
 
     case "ui.done":
       if (!head) return { ...next, state: "IDLE" };
-      return settle({ ...next, state: "IDLE", queue: state.queue.slice(1) });
+      return settle({
+        ...next,
+        state: "IDLE",
+        queue: state.queue.slice(1),
+        history: [head, ...state.history].slice(0, HISTORY_LIMIT),
+      });
 
     case "status": {
       const sessionId = input.sessionId;
@@ -122,6 +142,8 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
           state: "WORKING",
           sessionId,
           queue: state.queue.filter(blocking),
+          // Only the first busy of a turn starts the clock.
+          turnStartedAt: state.state === "WORKING" ? state.turnStartedAt : now || null,
           ...(switched ? { filesThisTurn: [], lastText: null } : {}),
         });
       }
@@ -152,6 +174,7 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
         // Consumed. The next turn starts from empty.
         filesThisTurn: [],
         lastText: null,
+        turnStartedAt: null,
       });
     }
 

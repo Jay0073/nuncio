@@ -269,9 +269,36 @@ function render() {
   const body = document.getElementById("body");
 
   if (!waiting) {
-    body.innerHTML = state.state === "WORKING"
-      ? `<div class="idle">Working. You will hear a tone when it needs you.</div>`
-      : `<div class="idle">Nothing waiting.</div>`;
+    const history = state.history || [];
+    const working = state.state === "WORKING";
+
+    body.innerHTML = `
+      <div class="idle">${working
+        ? "Working. You will hear a tone when it needs you."
+        : "Nothing waiting."}</div>
+      ${working ? `<div class="row"><button class="primary" id="progress">Where are you?</button></div>` : ""}
+      ${history.length ? `<div class="label" style="margin-top:26px">Recent — click to hear again</div>` : ""}
+      ${history.map((h, i) => `
+        <div class="card" style="margin-top:10px;cursor:pointer" data-history="${i}">
+          <div class="label">${escapeHtml(sourceLabel(h.report.source))}</div>
+          <div class="report" style="font-size:15px">${escapeHtml(h.report.text)}</div>
+        </div>`).join("")}`;
+
+    if (working) {
+      document.getElementById("progress").onclick = () => {
+        if (!soundReady) enableSound();
+        speak(progressSentence());
+      };
+    }
+
+    for (const card of body.querySelectorAll("[data-history]")) {
+      card.onclick = () => {
+        if (!soundReady) enableSound();
+        const item = history[Number(card.getAttribute("data-history"))];
+        // Replay reads what is already held. It never asks the agent again.
+        speakChunks([...item.report.chunks, ...(item.report.restChunks || [])]);
+      };
+    }
     return;
   }
 
@@ -334,6 +361,24 @@ function render() {
     lastPlayedKey = key;
     document.getElementById("listen").click();
   }
+}
+
+/**
+ * What nuncio can honestly say mid-run.
+ *
+ * Mechanical, because that is all it knows — the agent writes its report at the end, so there
+ * is no narrative yet. Real progress needs <<STEP>> markers, which are measured but not enabled.
+ */
+function progressSentence() {
+  const files = (state.filesThisTurn || []).map((p) => p.split(/[\\/]/).pop());
+  const started = state.turnStartedAt;
+  const mins = started ? Math.round((Date.now() - started) / 60000) : 0;
+
+  const time = !started ? "" : mins < 1 ? " It started less than a minute ago." : ` It has been going about ${mins} minute${mins === 1 ? "" : "s"}.`;
+
+  if (files.length === 0) return `Still working. Nothing written yet.${time}`;
+  if (files.length <= 3) return `Still working. It has changed ${files.join(", ")}.${time}`;
+  return `Still working. It has changed ${files.length} files, including ${files.slice(0, 3).join(", ")}.${time}`;
 }
 
 function sourceLabel(source) {

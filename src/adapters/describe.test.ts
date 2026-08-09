@@ -4,6 +4,7 @@ import {
   describeBash,
   describeEdit,
   describeQuestion,
+  describeStep,
   riskOf,
   steps,
 } from "./describe.ts";
@@ -52,19 +53,72 @@ describe("describeBash", () => {
     }
   });
 
-  test("describes a long multi-step command instead of reading it", () => {
-    // The real 905-character case from the capture. Reading it aloud is two minutes of noise.
+  test("says what a long command does, not how many steps it has", () => {
+    // "A six-step command" tells you nothing you can decide on. The real 905-character case.
     const command =
       '$base = "C:\\Users\\jay\\AppData\\Local\\Temp\\opencode\\standup-e2e"; ' +
-      'if (Test-Path $base) { Remove-Item -Recurse -Force $base }; ' +
-      'New-Item -ItemType Directory -Path "$base\\alpha","$base\\beta" -Force';
+      "if (Test-Path $base) { Remove-Item -Recurse -Force $base }; " +
+      'New-Item -ItemType Directory -Path "$base\\alpha" -Force';
 
     const spoken = describeBash(command);
-    expect(spoken).toContain("3-step command");
-    expect(spoken).toContain("deletes files");
+    expect(spoken).toContain("delete");
+    expect(spoken).toContain("create the folder alpha");
     expect(spoken).toContain("That is destructive.");
-    expect(spoken.length).toBeLessThan(240);
     expect(spoken).not.toContain("AppData");
+    expect(spoken.length).toBeLessThan(260);
+  });
+
+  test("names what each step does, joined as a sequence not a choice", () => {
+    const spoken = describeBash('mkdir "src/lib"; bun test; git commit -m "add the grouping"');
+    expect(spoken).toContain("create the folder lib");
+    expect(spoken).toContain(", then ");
+    expect(spoken).not.toContain(" or ");
+  });
+
+  test("a git commit says what the message is", () => {
+    // This is the whole point: you cannot approve what you cannot understand.
+    expect(describeBash('git add -A; git commit -m "fix the date parsing"')).toContain(
+      "commit with the message, fix the date parsing",
+    );
+  });
+
+  test("a push says what goes where", () => {
+    expect(describeBash("git push origin main && git status")).toContain("push main to origin");
+  });
+
+  test("an unexpanded shell variable becomes a generic word, not a meaningless name", () => {
+    // "delete base" -- from $base -- tells the listener nothing at all.
+    const spoken = describeBash("Remove-Item -Recurse -Force $base; New-Item -Path $out");
+    expect(spoken).toContain("delete a folder");
+    expect(spoken).not.toMatch(/delete base/);
+  });
+
+  test("the generic fallback does not produce doubled articles", () => {
+    // "create the folder a folder" was the first attempt at this.
+    const spoken = describeBash("Remove-Item -Force $x; New-Item -ItemType Directory -Path $y");
+    expect(spoken).toContain("create a folder");
+    expect(spoken).not.toContain("the folder a folder");
+  });
+
+  test("says to look at the screen when it cannot describe the command", () => {
+    const spoken = describeBash("weirdtool --flag alpha; othertool --flag beta");
+    expect(spoken).toContain("look at the screen");
+  });
+
+  test("reads the -Path value, not the value of an earlier flag", () => {
+    // `New-Item -ItemType Directory -Path $fresh` came out as "create the folder Directory".
+    expect(describeStep("New-Item -ItemType Directory -Path C:\\tmp\\freshrepo -Force")).toBe(
+      "create the folder freshrepo",
+    );
+    expect(describeStep('New-Item -ItemType Directory -Path "$base\\alpha" -Force')).toBe(
+      "create the folder alpha",
+    );
+  });
+
+  test("a script path is shortened to its file name", () => {
+    expect(describeStep("bun run C:\\Users\\jay\\projects\\standup\\src\\index.ts")).toBe(
+      "run the index.ts script",
+    );
   });
 
   test("a destructive command names the paths it touches", () => {
@@ -91,10 +145,11 @@ describe("steps and actionsOf", () => {
     expect(steps("just one")).toEqual(["just one"]);
   });
 
-  test("names at most three actions", () => {
-    const actions = actionsOf("rm -rf x; mkdir y; bun test; git commit -m z; git push");
+  test("names at most three actions, in the order they happen", () => {
+    const actions = actionsOf('rm -rf build; mkdir dist; bun test; git commit -m "x"; git push');
     expect(actions.length).toBeLessThanOrEqual(3);
-    expect(actions[0]).toBe("deletes files");
+    expect(actions[0]).toBe("delete build");
+    expect(actions[1]).toBe("create the folder dist");
   });
 });
 
