@@ -126,9 +126,11 @@ export function translate(raw: RawEvent): NormalizedEvent[] {
     // The complete assistant text arrives here, not as a fragment. `tool`, `reasoning`,
     // `step-start` and `step-finish` parts are silent.
     case "message.part.updated": {
-      const part = p.part as { type?: string; text?: string } | undefined;
+      const part = p.part as { id?: string; type?: string; text?: string } | undefined;
       if (part?.type !== "text" || typeof part.text !== "string" || !sessionId) return [];
-      return [{ kind: "assistant.text", sessionId, text: part.text }];
+      return [
+        { kind: "assistant.text", sessionId, partId: part.id ?? "", text: part.text },
+      ];
     }
 
     // `{ file }` only — no session id. See the note in state.ts.

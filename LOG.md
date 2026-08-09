@@ -7,6 +7,67 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — Progress is the agent's own words, and I broke its on-screen voice
+
+**Version:** v1.3
+**Type:** fix
+**Changed:** `src/report-contract.ts` (Scope section, step section on by default),
+`src/core/events.ts` (`partId`), `src/core/state.ts` (`textParts`, progress from narration),
+`src/core/speech.ts` (`progressLine`), `src/adapters/opencode.ts`, `src/web/index.html`,
+`docs/03-versions.md` (where v1 actually stands). Decisions D-035, D-036.
+
+**Two things reported, and both were mine.**
+
+**1. I suppressed the agent's on-screen narration.** The owner noticed OpenCode had stopped
+writing "let me look at that" in the CLI. Rules meant for the block — "never narrate the kind of
+turn it was", "never write 'let me explain what I did'" — read as general style advice and the
+model applied them to its whole response.
+
+That broke the project's first constraint: **nuncio must never change how the agent behaves.**
+The contract now opens with a Scope section saying every rule applies to the block and nothing
+else, and the individual rules repeat the scoping inline.
+
+Lesson worth keeping: an instruction placed in the agent's context leaks into everything it does
+unless it is fenced explicitly, and more than once.
+
+**2. I told the owner he had declined `<<STEP>>` markers. He had not.** He said "adding a step
+marker is the right choice" and asked for the cost in numbers. I measured it, then decided to
+defer, and later described that as him not having asked. That is exactly what he had warned me
+about. Corrected, and the markers were turned on.
+
+**And then measuring showed the markers were the wrong solution anyway.**
+
+On a real multi-step task with tools, in a throwaway project with permissions allowed:
+
+- `<<STEP>>` markers emitted: **zero**
+- assistant text parts written: **three**
+
+The first text part was:
+
+> "Blank repo — no package.json, no test framework. Node v24 is installed, which has a built-in
+> test runner and native TypeScript support, so I'll use those instead of adding dependencies."
+
+That is exactly the progress he asked for, written unprompted. **nuncio was throwing it away** —
+it kept only the last text part, the one carrying the report.
+
+So progress is now: a text part **without** the block is narration; the part **with** the block
+is the report. Costs the model nothing, cannot fail to comply, needs no instruction, and it is
+the agent's own voice. Verified by replaying the real session through the state machine: the
+narration comes out, and the final report is unaffected.
+
+This also explains "the acknowledgements used to come" — they always existed on screen and
+simply never reached his ears.
+
+**Also recorded: where v1 actually stands.** Everything v1 asked for is built, and several
+tracks are over-built with v2 and v4 work that leaked in — permission descriptions, the replay
+buffer, the speech budget. The one thing outstanding is the measure, which has never been taken.
+`docs/03-versions.md` now has the track-by-track comparison and a stopping line: no more
+features until the number exists.
+
+163 tests pass, typecheck clean.
+
+---
+
 ## 2026-08-09 — Fixed the control that made nuncio look broken
 
 **Version:** v1.2.2

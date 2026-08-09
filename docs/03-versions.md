@@ -103,6 +103,44 @@ report mean you did not need the screen? Target 7 out of 10.
 
 ---
 
+## Where v1 actually stands
+
+**v1's goal:** does an ambient audio channel change how I work at the desk? Output only, no
+voice input, desk only.
+
+**Against the planned grid, v1 is complete and several tracks are over-built:**
+
+| Track | v1 planned | Actually built | Note |
+|---|---|---|---|
+| EAR | L1 | **L1 + L2 + L3** | budget and reformatting are v2/v4 work |
+| MOUTH | L0 | L0 | on plan — you still type |
+| ATTENTION | L1 | **L1 + L2 + part of L3** | state machine and progress are v2/v4 work |
+| HANDOFF | L0 | L0 | on plan — desk only |
+| TURN-TAKING | L0 | **L3, without L2** | permissions are described but cannot be answered by voice |
+| RECALL | L0 | **L2** | replay from history is v4 work |
+| REPORT | L1 | L1 | on plan |
+| REACH | L1 | L1 | on plan |
+
+**So the honest position: everything v1 asked for exists, plus pieces of v2 and v4. The one
+thing outstanding is the measure.** We have never got the number.
+
+That is why it feels endless. Each round has been fixing the *quality* of v1's core capability,
+which is legitimate, but permission descriptions and the replay buffer leaked in from later
+versions. The version grid exists to catch exactly that, and it did not.
+
+**The stopping line: no more features until the measure is taken.**
+
+> Over roughly 10 turns, how many times did the spoken report mean you did not need to look at
+> the screen? Target 7 out of 10.
+
+Below 7, fix the contract — that is still v1 work. At or above 7, v1 is done and v2 starts.
+
+**What v2 adds, so the boundary is clear:** talking back. Push-to-talk in the page, local
+Whisper, answering permissions and questions by voice, and "repeat that" handled locally. That
+is the whole of v2. Everything else is later.
+
+---
+
 ## v2 — The Unblock
 
 **Size:** about one week. Desk only. The loop closes.

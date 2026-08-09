@@ -23,13 +23,15 @@ describe("translate", () => {
     ]);
   });
 
-  test("a text part is the assistant's answer", () => {
+  test("a text part carries its id, so a growing part replaces itself", () => {
     expect(
       translate({
         type: "message.part.updated",
-        properties: { sessionID: "ses_1", part: { type: "text", text: "the answer" } },
+        properties: { sessionID: "ses_1", part: { id: "prt_1", type: "text", text: "the answer" } },
       }),
-    ).toEqual([{ kind: "assistant.text", sessionId: "ses_1", text: "the answer" }]);
+    ).toEqual([
+      { kind: "assistant.text", sessionId: "ses_1", partId: "prt_1", text: "the answer" },
+    ]);
   });
 
   test("tool, reasoning and step parts are silent", () => {

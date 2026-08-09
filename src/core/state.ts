@@ -12,6 +12,8 @@
 
 import type { NormalizedEvent } from "./events.ts";
 import { buildReport, plain, type Report } from "./report.ts";
+import { parseSteps, SPEAK_OPEN } from "../report-contract.ts";
+import { progressLine } from "./speech.ts";
 
 export type State = "IDLE" | "WORKING" | "PENDING" | "SPEAKING";
 
@@ -48,8 +50,22 @@ export interface NuncioState {
   history: Waiting[];
   /** Files written during the current turn. Ground truth for the fallback report. */
   filesThisTurn: string[];
-  /** The assistant's latest text for the current turn. */
+  /**
+   * The assistant's text parts for the current turn, in order, keyed so a growing part replaces
+   * itself rather than being counted twice.
+   */
+  textParts: { id: string; text: string }[];
+  /** The part carrying the `<<SPEAK>>` block, or the last part if none does. */
   lastText: string | null;
+  /**
+   * What to say if you ask mid-run where it has got to.
+   *
+   * These are the agent's own words, written between its tool calls — "Blank repo, no test
+   * framework, so I'll use Node's built-in runner". It writes them anyway, so this costs the
+   * model nothing and cannot fail to comply. `<<STEP>>` markers, when a model emits them, are
+   * merged in here too. Cleared when the turn finishes.
+   */
+  stepsThisTurn: string[];
   /** When the current turn began. Used to say how long it has been running. */
   turnStartedAt: number | null;
   lastEventAt: number | null;
@@ -64,7 +80,9 @@ export const initialState: NuncioState = {
   queue: [],
   history: [],
   filesThisTurn: [],
+  textParts: [],
   lastText: null,
+  stepsThisTurn: [],
   turnStartedAt: null,
   lastEventAt: null,
 };
@@ -144,7 +162,7 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
           queue: state.queue.filter(blocking),
           // Only the first busy of a turn starts the clock.
           turnStartedAt: state.state === "WORKING" ? state.turnStartedAt : now || null,
-          ...(switched ? { filesThisTurn: [], lastText: null } : {}),
+          ...(switched ? { filesThisTurn: [], textParts: [], lastText: null, stepsThisTurn: [] } : {}),
         });
       }
       if (next.state === "WORKING" && state.queue.length === 0) {
@@ -153,8 +171,29 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
       return { ...next, sessionId };
     }
 
-    case "assistant.text":
-      return { ...next, sessionId: input.sessionId, lastText: input.text };
+    case "assistant.text": {
+      // A part is re-sent as it grows, so replace it rather than adding it again.
+      const parts = [...state.textParts];
+      const existing = parts.findIndex((p) => p.id === input.partId);
+      if (existing >= 0) parts[existing] = { id: input.partId, text: input.text };
+      else parts.push({ id: input.partId, text: input.text });
+
+      // The final report is whichever part carries the block. If none does yet, the last one.
+      const final = parts.find((p) => p.text.includes(SPEAK_OPEN));
+      const lastText = (final ?? parts.at(-1))?.text ?? null;
+
+      // Everything else is the agent narrating as it works. That is the progress.
+      const narration = parts
+        .filter((p) => !p.text.includes(SPEAK_OPEN))
+        .map((p) => progressLine(p.text))
+        .filter((line): line is string => line !== null);
+
+      // Merge in any explicit markers, for models that do emit them.
+      const markers = parts.flatMap((p) => parseSteps(p.text));
+      const steps = [...new Set([...narration, ...markers])];
+
+      return { ...next, sessionId: input.sessionId, textParts: parts, lastText, stepsThisTurn: steps };
+    }
 
     case "file.edited": {
       // `file.edited` carries no session id, so it is attributed to the session nuncio is
@@ -173,7 +212,9 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
         queue: [...state.queue, item],
         // Consumed. The next turn starts from empty.
         filesThisTurn: [],
+        textParts: [],
         lastText: null,
+        stepsThisTurn: [],
         turnStartedAt: null,
       });
     }

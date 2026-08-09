@@ -172,6 +172,47 @@ export function chunkWords(chunks: Chunk[]): number {
   return chunks.reduce((n, c) => n + countWords(c.text), 0);
 }
 
+/** Progress lines are heard while you wait. Long enough to mean something, short enough to skim. */
+const PROGRESS_MAX_WORDS = 34;
+
+/**
+ * Turn a mid-turn text part into one line worth hearing.
+ *
+ * The agent writes these for the screen, so they carry markdown, bullet lists and file paths.
+ * Only the opening sentences say what is happening; the rest is detail you can read later.
+ *
+ * Returns null when there is nothing worth saying.
+ */
+export function progressLine(text: string): string | null {
+  const flat = text
+    // Whole fenced blocks, not just the fence lines — otherwise the code inside gets spoken.
+    .replace(/```[\s\S]*?(```|$)/g, " ")
+    .split("\n")
+    // Bullet lists, tables and headings are detail, not narration.
+    .filter((line) => !/^\s*([-*+]\s|\d+\.\s|\||#)/.test(line))
+    .join(" ")
+    .replace(/`+/g, "")
+    .replace(/\*\*?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (flat.length === 0) return null;
+
+  const sentences = splitSentences(flat);
+  const kept: string[] = [];
+  let words = 0;
+  for (const sentence of sentences) {
+    const length = countWords(sentence);
+    if (kept.length > 0 && words + length > PROGRESS_MAX_WORDS) break;
+    kept.push(sentence);
+    words += length;
+    if (words >= PROGRESS_MAX_WORDS) break;
+  }
+
+  const line = kept.join(" ").trim();
+  return line.length > 0 ? line : null;
+}
+
 export function chunkText(chunks: Chunk[]): string {
   return chunks.map((c) => c.text).join(" ");
 }

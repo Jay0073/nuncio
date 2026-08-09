@@ -21,8 +21,18 @@ export interface FileChange {
 export type NormalizedEvent =
   /** A turn started or ended. `busy` is the WORKING signal. */
   | { kind: "status"; sessionId: string; busy: boolean }
-  /** The assistant's finished text for a turn. The <<SPEAK>> block lives in here. */
-  | { kind: "assistant.text"; sessionId: string; text: string }
+  /**
+   * One of the assistant's text parts.
+   *
+   * A turn produces several. The last one carries the `<<SPEAK>>` block; the earlier ones are
+   * the agent narrating as it works — "Blank repo, no test framework, so I'll use Node's
+   * built-in runner". That narration is exactly what you want to hear mid-run, and it costs the
+   * model nothing because it already writes it.
+   *
+   * `partId` identifies which part this is. A part is re-sent as it grows, so it must replace
+   * the previous version of itself rather than be appended.
+   */
+  | { kind: "assistant.text"; sessionId: string; partId: string; text: string }
   /** The agent stopped and is waiting. Nothing else is coming. */
   | { kind: "turn.finished"; sessionId: string }
   /** A file was written. Ground truth for the fallback report. */

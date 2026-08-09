@@ -11,7 +11,14 @@ function run(...inputs: Input[]): NuncioState {
 }
 
 const busy = (b: boolean): NormalizedEvent => ({ kind: "status", sessionId: S, busy: b });
-const text = (t: string): NormalizedEvent => ({ kind: "assistant.text", sessionId: S, text: t });
+let partCounter = 0;
+/** A fresh text part each time, mirroring how the agent writes several across one turn. */
+const text = (t: string, partId = `prt_${++partCounter}`): NormalizedEvent => ({
+  kind: "assistant.text",
+  sessionId: S,
+  partId,
+  text: t,
+});
 const finished: NormalizedEvent = { kind: "turn.finished", sessionId: S };
 const block = (body: string) => `response\n<<SPEAK>>\n${body}\n<<END>>`;
 
@@ -222,6 +229,67 @@ describe("permissions and questions", () => {
       busy(true),
     );
     expect(head(state)?.questionId).toBe("que_1");
+  });
+});
+
+describe("progress — the agent's own mid-turn narration", () => {
+  // Measured, not assumed: on a real multi-step task the agent emitted zero <<STEP>> markers but
+  // did write three text parts. The first was "Blank repo — no package.json, no test framework.
+  // Node v24 is installed, so I'll use those instead of adding dependencies." That is exactly
+  // the progress you want, it costs the model nothing, and it cannot fail to comply.
+  const NARRATION = "Blank repo, no test framework. I will use Node's built-in runner.";
+
+  test("a text part without the block is progress", () => {
+    const state = run(busy(true), text(NARRATION));
+    expect(state.stepsThisTurn).toEqual([NARRATION]);
+  });
+
+  test("the part carrying the block is the report, not progress", () => {
+    const state = run(busy(true), text(NARRATION), text(block("did: All 20 tests pass.")));
+    expect(state.stepsThisTurn).toEqual([NARRATION]);
+    expect(state.lastText).toContain("<<SPEAK>>");
+  });
+
+  test("a growing part replaces itself instead of being counted twice", () => {
+    const state = run(
+      busy(true),
+      text("Reading the formatter.", "prt_a"),
+      text("Reading the formatter. Found three places using UTC.", "prt_a"),
+    );
+    expect(state.stepsThisTurn).toEqual(["Reading the formatter. Found three places using UTC."]);
+  });
+
+  test("several parts become several progress lines, in order", () => {
+    const state = run(busy(true), text("First I read the file.", "a"), text("Now running tests.", "b"));
+    expect(state.stepsThisTurn).toEqual(["First I read the file.", "Now running tests."]);
+  });
+
+  test("markdown and bullet lists are stripped, because they are detail not narration", () => {
+    const state = run(
+      busy(true),
+      text("Done with the **setup**.\n- `hours.ts` created\n- `hours.test.ts` created\n```ts\ncode\n```"),
+    );
+    expect(state.stepsThisTurn).toEqual(["Done with the setup."]);
+  });
+
+  test("explicit STEP markers are merged in when a model does emit them", () => {
+    const state = run(busy(true), text("<<STEP>> Found the cause.\nSome on-screen detail."));
+    expect(state.stepsThisTurn).toContain("Found the cause.");
+  });
+
+  test("progress is cleared when the turn finishes", () => {
+    const state = run(busy(true), text(NARRATION), finished);
+    expect(state.stepsThisTurn).toEqual([]);
+    expect(state.textParts).toEqual([]);
+  });
+
+  test("progress does not leak from one session into another", () => {
+    const state = run(busy(true), text(NARRATION), {
+      kind: "status",
+      sessionId: "ses_2",
+      busy: true,
+    });
+    expect(state.stepsThisTurn).toEqual([]);
   });
 });
 

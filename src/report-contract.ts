@@ -59,8 +59,18 @@ ask: a question you need answered, with the options
 ${SPEAK_CLOSE}
 
 A text-to-speech engine reads this block aloud. I may be away from the screen when it does.
-Your normal response stays on screen exactly as you would write it. This block is extra, and it
-is the only part that is spoken.
+
+## Scope — read this before anything else
+
+**Every instruction in this document applies to the block and to nothing else.**
+
+Your normal response does not change in any way. Keep thinking out loud on screen. Keep saying
+"let me look at that" and "I'll check the tests" if that is what you would normally write. Keep
+your usual length, your usual formatting, your usual markdown, your usual level of detail.
+
+If you find yourself making your on-screen answer shorter, plainer or less chatty because of
+something written here, stop — that is the opposite of what this document asks for. The block is
+an **addition**. Nothing is taken away.
 
 ## The one rule that matters
 
@@ -128,8 +138,9 @@ Length follows **what I asked for**, not how long you worked.
 - **The turn was small.** One file read, one small edit, a yes or no.
   One sentence.
 
-**Never narrate the kind of turn it was.** Do not write "I answered your question", "I did not
-run any tools", "As requested", "Here is what I did". Start with the content.
+**In the block, never narrate the kind of turn it was.** Do not write "I answered your
+question", "I did not run any tools", "As requested", "Here is what I did". Start with the
+content. (On screen, write however you normally would.)
 
 **Do not compress what is already short.** If your on-screen response was already brief, the
 report should carry nearly all of it, rewritten to be heard rather than read. Summarising a
@@ -147,7 +158,9 @@ This is the target for a change-something turn:
   decision: I left formatDigest alone rather than splitting it now, because that is a bigger
   change than you asked for.
 
-## How to write it
+## How to write it — these rules are for the block only
+
+Your on-screen response is not covered by any of them.
 
 - **Simple English. I am not a native speaker, and I am listening, not reading — I cannot go
   back over a sentence I missed.** Use common words. Say "use" not "utilise", "so" not
@@ -171,12 +184,18 @@ This is the target for a change-something turn:
 - Put the block at the very end. Write nothing after ${SPEAK_CLOSE}.`;
 
 export interface ContractOptions {
-  /** Ask for `<<STEP>>` progress lines during the turn. Off until measured. */
+  /**
+   * Ask for `<<STEP>>` progress lines during the turn.
+   *
+   * On by default. Measured over 40 runs before enabling: one extra failure in twenty (within
+   * noise at that sample size), +3% latency, and reports 32% longer. The length cost is the
+   * real one, and the budget absorbs it. See docs/06-research.md.
+   */
   steps?: boolean;
 }
 
 export function buildContract(options: ContractOptions = {}): string {
-  return options.steps ? CONTRACT_BODY + STEP_SECTION : CONTRACT_BODY;
+  return options.steps === false ? CONTRACT_BODY : CONTRACT_BODY + STEP_SECTION;
 }
 
 export const REPORT_CONTRACT = buildContract();

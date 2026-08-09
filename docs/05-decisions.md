@@ -370,6 +370,48 @@ A model that copies the skeleton instead of filling it in produces a block that 
 and says nothing. Speaking "what happened, in order, with the real names" aloud is worse than
 silence, so placeholder text is filtered like `none` and `N/A` are.
 
+### D-035 — Progress is the agent's own mid-turn narration, not `<<STEP>>` markers
+**Status:** active
+Supersedes the plan to have the agent emit `<<STEP>>` lines.
+
+Measured on a real multi-step task with tools: the agent emitted **zero** step markers. It did
+write **three text parts**, and the first one was:
+
+> "Blank repo — no package.json, no test framework. Node v24 is installed, which has a built-in
+> test runner and native TypeScript support, so I'll use those instead of adding dependencies."
+
+That is exactly the progress the owner wanted, written unprompted, for free. nuncio was throwing
+it away — it kept only the **last** text part, which is the one carrying the report.
+
+So: a text part **without** the `<<SPEAK>>` block is progress. The part **with** the block is the
+report. This costs the model nothing, cannot fail to comply, needs no contract instruction, and
+it is the agent's own voice rather than a format we imposed.
+
+The `<<STEP>>` instruction stays in the contract and any markers a model does emit are merged
+in, but nothing depends on them.
+
+This also explains the owner's report that acknowledgements "used to come": they always existed
+on screen. They simply never reached his ears.
+
+Consequence: `assistant.text` now carries a `partId`, because a part is re-sent as it grows and
+must replace itself rather than be counted twice.
+
+### D-036 — Contract rules must be scoped to the block, loudly and repeatedly
+**Status:** active
+The owner reported that OpenCode stopped writing its usual "let me look at that" narration on
+screen. That was nuncio's fault. Rules meant for the block — "never narrate the kind of turn it
+was", "never write 'let me explain what I did'" — read as general style advice, and the model
+applied them to its whole response.
+
+**That broke the project's first constraint: nuncio must never change how the agent behaves.**
+
+The contract now opens with a Scope section stating that every instruction applies to the block
+and nothing else, that the on-screen answer must not change, and that if the model finds itself
+writing more briefly on screen it should stop. Individual rules repeat the scoping inline.
+
+Worth remembering as a general lesson: an instruction placed in the agent's context will leak
+into everything the agent does unless it is fenced explicitly and more than once.
+
 ---
 
 ## Superseded decisions

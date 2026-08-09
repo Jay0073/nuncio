@@ -224,6 +224,7 @@ let state = null;
 let lastWaitingKey = null;
 let lastPlayedKey = null;
 let lastState = null;
+let spokenSteps = 0;
 let lastChunks = [];
 let lastSpokenIndex = 0;
 
@@ -266,8 +267,18 @@ function render() {
   // fires "busy" about 17 times per turn.
   if (mode === "live" && soundReady && state.state === "WORKING" && lastState !== "WORKING") {
     speak("Okay, working on it.");
+    spokenSteps = 0;
   }
   lastState = state.state;
+
+  // Progress markers the agent wrote as it worked. Speak only the ones not heard yet.
+  const steps = state.stepsThisTurn || [];
+  if (steps.length < spokenSteps) spokenSteps = 0;
+  if (mode === "live" && soundReady && steps.length > spokenSteps) {
+    const fresh = steps.slice(spokenSteps);
+    spokenSteps = steps.length;
+    speakChunks(fresh.map((text, i) => ({ text, pauseAfterMs: i === fresh.length - 1 ? 0 : 500 })));
+  }
 
   const dot = document.getElementById("dot");
   dot.className = "dot " + (waiting && waiting.ping === "error" ? "error" : state.state);
@@ -292,6 +303,11 @@ function render() {
       <div class="idle">${working
         ? "Working. You will hear a tone when it needs you."
         : "Nothing waiting."}</div>
+      ${working && (state.stepsThisTurn || []).length
+        ? `<div class="card"><div class="label">Progress</div>${(state.stepsThisTurn || [])
+            .map((s) => `<div class="report" style="font-size:15px">${escapeHtml(s)}</div>`)
+            .join("")}</div>`
+        : ""}
       ${working ? `<div class="row"><button class="primary" id="progress">Where are you?</button></div>` : ""}
       ${history.length ? `<div class="label" style="margin-top:26px">Recent — click to hear again</div>` : ""}
       ${history.map((h, i) => `
@@ -393,11 +409,20 @@ function render() {
  * is no narrative yet. Real progress needs <<STEP>> markers, which are measured but not enabled.
  */
 function progressSentence() {
+  const steps = state.stepsThisTurn || [];
   const files = (state.filesThisTurn || []).map((p) => p.split(/[\\/]/).pop());
   const started = state.turnStartedAt;
   const mins = started ? Math.round((Date.now() - started) / 60000) : 0;
 
-  const time = !started ? "" : mins < 1 ? " It started less than a minute ago." : ` It has been going about ${mins} minute${mins === 1 ? "" : "s"}.`;
+  const time = !started
+    ? ""
+    : mins < 1
+      ? " It started less than a minute ago."
+      : ` It has been going about ${mins} minute${mins === 1 ? "" : "s"}.`;
+
+  // If the agent wrote progress markers, they are the answer — a real narrative beats a count.
+  // The last two are what matters; the rest is history.
+  if (steps.length > 0) return `${steps.slice(-2).join(" ")}${time}`;
 
   if (files.length === 0) return `Still working. Nothing written yet.${time}`;
   if (files.length <= 3) return `Still working. It has changed ${files.join(", ")}.${time}`;
