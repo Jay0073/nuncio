@@ -11,7 +11,7 @@
  */
 
 import type { NormalizedEvent } from "./events.ts";
-import { buildReport, type Report } from "./report.ts";
+import { buildReport, plain, type Report } from "./report.ts";
 
 export type State = "IDLE" | "WORKING" | "PENDING" | "SPEAKING";
 
@@ -91,7 +91,13 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
       if (!head || head.report.rest === "") return state;
       const promoted: Waiting = {
         ...head,
-        report: { ...head.report, text: head.report.rest, rest: "" },
+        report: {
+          ...head.report,
+          text: head.report.rest,
+          chunks: head.report.restChunks,
+          rest: "",
+          restChunks: [],
+        },
       };
       return { ...next, state: "SPEAKING", queue: [promoted, ...state.queue.slice(1)] };
     }
@@ -154,13 +160,7 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
       const item: Waiting = {
         ping: "needs-you",
         permissionId: input.permissionId,
-        report: {
-          text: input.summary,
-          rest: "",
-          source: "permission",
-          needsYou: true,
-          files: [],
-        },
+        report: plain(input.summary, "permission", true),
       };
       return settle({ ...next, sessionId: input.sessionId, queue: [...state.queue, item] });
     }
@@ -170,7 +170,7 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
       const item: Waiting = {
         ping: "needs-you",
         questionId: input.questionId,
-        report: { text: input.spoken, rest: "", source: "question", needsYou: true, files: [] },
+        report: plain(input.spoken, "question", true),
       };
       return settle({ ...next, sessionId: input.sessionId, queue: [...state.queue, item] });
     }
@@ -203,13 +203,7 @@ export function reduce(state: NuncioState, input: Input, now = 0): NuncioState {
       }
       const item: Waiting = {
         ping: "error",
-        report: {
-          text: `Something went wrong. ${input.message}`,
-          rest: "",
-          source: "error",
-          needsYou: true,
-          files: [],
-        },
+        report: plain(`Something went wrong. ${input.message}`, "error", true),
       };
       return settle({ ...next, sessionId: input.sessionId, queue: [...state.queue, item] });
     }

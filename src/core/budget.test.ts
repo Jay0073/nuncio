@@ -2,14 +2,21 @@ import { describe, expect, test } from "bun:test";
 import { budgetFor, countWords, splitSentences, trimToBudget } from "./budget.ts";
 
 describe("budgetFor", () => {
-  // The budget follows the work actually done, using the file.edited events nuncio already has.
-  // A turn that touched nothing has not earned 100 words.
-  test("scales with the number of files changed", () => {
-    expect(budgetFor(0)).toBe(45);
+  test("a code-change turn is kept concise, and scales with how much changed", () => {
+    // The diff is on screen. You can read it. The report does not need to be the whole story.
     expect(budgetFor(1)).toBe(70);
     expect(budgetFor(3)).toBe(70);
     expect(budgetFor(4)).toBe(100);
     expect(budgetFor(40)).toBe(100);
+  });
+
+  test("a turn that changed nothing gets the MOST room, not the least", () => {
+    // Regression. The first version gave a no-change turn 45 words, the smallest budget. But an
+    // audit changes no files and is the longest report type — asked to review a function, the
+    // agent found seven real problems and only two of them fitted. There is nothing on screen
+    // to read instead, so the words are the deliverable.
+    expect(budgetFor(0)).toBe(90);
+    expect(budgetFor(0)).toBeGreaterThan(budgetFor(2));
   });
 });
 

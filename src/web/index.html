@@ -62,8 +62,16 @@
 <body>
 <header>
   <div class="brand">nuncio <span id="conn">connecting</span></div>
-  <button id="enable" style="font-size:13px;padding:8px 12px">Enable sound</button>
+  <div class="row" style="gap:8px">
+    <button id="mode" style="font-size:13px;padding:8px 12px">Quiet</button>
+    <button id="enable" style="font-size:13px;padding:8px 12px">Enable sound</button>
+  </div>
 </header>
+<div style="width:100%;max-width:620px;margin-bottom:18px" class="status">
+  <label for="rate" style="flex:none">Speed</label>
+  <input type="range" id="rate" min="0.6" max="1.4" step="0.05" style="flex:1;max-width:220px" />
+  <span id="rateValue" style="flex:none;min-width:2.6em"></span>
+</div>
 
 <main>
   <div class="status"><span class="dot" id="dot"></span><span id="stateLabel">…</span></div>
@@ -89,6 +97,36 @@ function enableSound() {
   if (window.Notification && Notification.permission === "default") Notification.requestPermission();
 }
 document.getElementById("enable").addEventListener("click", enableSound);
+
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
+const modeButton = document.getElementById("mode");
+const rateInput = document.getElementById("rate");
+const rateValue = document.getElementById("rateValue");
+
+function paintMode() {
+  modeButton.textContent = mode === "live" ? "Live" : "Quiet";
+  modeButton.title =
+    mode === "live"
+      ? "Speaks every report as it arrives. Click for Quiet."
+      : "Only speaks when you ask. Click for Live.";
+}
+
+modeButton.addEventListener("click", () => {
+  mode = mode === "live" ? "quiet" : "live";
+  localStorage.setItem("nuncio.mode", mode);
+  if (mode === "live" && !soundReady) enableSound();
+  paintMode();
+});
+
+function paintRate() { rateValue.textContent = `${rate.toFixed(2)}x`; }
+
+rateInput.addEventListener("input", () => {
+  rate = Number(rateInput.value);
+  localStorage.setItem("nuncio.rate", String(rate));
+  paintRate();
+});
 
 const TONES = {
   // done: two notes rising. Neutral, easy to ignore.
@@ -124,16 +162,51 @@ function notify(text) {
 
 // ---------------------------------------------------------------------------
 // Speech
+//
+// Browsers ignore SSML break tags, so pauses cannot be marked up in the text. Instead each
+// sentence is its own utterance and the silence between them is real waiting. The daemon
+// decides how long each pause should be: long at a topic change, short inside one thought,
+// scaled by how dense the sentence was.
 // ---------------------------------------------------------------------------
+let rate = Number(localStorage.getItem("nuncio.rate") || "1.0");
+let cancelled = false;
+
+function stopSpeaking() {
+  cancelled = true;
+  try { speechSynthesis.cancel(); } catch {}
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+function sayOne(text) {
+  return new Promise((resolve) => {
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = rate;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+      speechSynthesis.speak(utterance);
+    } catch { resolve(); }
+  });
+}
+
+/** Speak a list of {text, pauseAfterMs}. Returns when finished or cancelled. */
+async function speakChunks(chunks, onProgress) {
+  stopSpeaking();
+  cancelled = false;
+  for (let i = 0; i < chunks.length; i++) {
+    if (cancelled) return false;
+    if (onProgress) onProgress(i, chunks.length);
+    await sayOne(chunks[i].text);
+    if (cancelled) return false;
+    if (chunks[i].pauseAfterMs > 0) await sleep(chunks[i].pauseAfterMs);
+  }
+  return !cancelled;
+}
+
+/** Fallback for plain strings with no chunking. */
 function speak(text, onEnd) {
-  try {
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.05;
-    utterance.onend = onEnd;
-    utterance.onerror = onEnd;
-    speechSynthesis.speak(utterance);
-  } catch { onEnd(); }
+  speakChunks([{ text, pauseAfterMs: 0 }]).then(() => onEnd && onEnd());
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +215,13 @@ function speak(text, onEnd) {
 let socket = null;
 let state = null;
 let lastWaitingKey = null;
+let lastPlayedKey = null;
+let lastChunks = [];
+let lastSpokenIndex = 0;
+
+// Quiet is the junior-developer model: it waits until you ask. Live plays each report as it
+// arrives, for when you are walking with earphones and cannot click anything.
+let mode = localStorage.getItem("nuncio.mode") || "quiet";
 
 function send(kind) { try { socket.send(JSON.stringify({ kind })); } catch {} }
 
@@ -204,7 +284,7 @@ function render() {
     ${soundReady ? "" : `<div class="warn">Press “Enable sound” once so the browser lets nuncio play audio.</div>`}
     <div class="card waiting">
       <div class="label">${escapeHtml(sourceLabel(report.source))}</div>
-      <div class="report">${escapeHtml(report.text)}</div>
+      <div class="report" id="reportText">${escapeHtml(report.text)}</div>
       ${report.files.length ? `<div class="files">Changed: ${escapeHtml(report.files.join(", "))}</div>` : ""}
       ${hasMore ? `<div class="meta">There is more — ${report.fullWords} words in total.</div>` : ""}
       ${report.source === "fallback" ? `<div class="meta">The agent wrote no summary block.</div>` : ""}
@@ -212,30 +292,48 @@ function render() {
     <div class="row" style="margin-top:16px">
       <button class="primary" id="listen">${speaking ? "Speaking…" : "Listen"}</button>
       ${hasMore ? `<button id="more">More</button>` : ""}
+      <button id="again" title="Repeat the last sentence only">Again</button>
       <button id="dismiss">Dismiss</button>
     </div>`;
 
-  document.getElementById("listen").onclick = () => {
+  const play = async (chunks, thenDone) => {
     if (!soundReady) enableSound();
+    lastChunks = chunks;
+    const finished = await speakChunks(chunks, (i) => { lastSpokenIndex = i; });
+    if (finished && thenDone) send("ui.done");
+  };
+
+  document.getElementById("listen").onclick = () => {
     send("ui.open");
-    // Only offer the rest aloud when there actually is a rest.
-    const tail = hasMore ? " There is more, if you want it." : "";
-    speak(report.text + tail, () => { if (!hasMore) send("ui.done"); });
+    const chunks = [...report.chunks];
+    // Only offer the rest aloud when there actually is one.
+    if (hasMore) chunks.push({ text: "There is more, if you want it.", pauseAfterMs: 0 });
+    play(chunks, !hasMore);
   };
 
   if (hasMore) {
     document.getElementById("more").onclick = () => {
-      if (!soundReady) enableSound();
-      const rest = report.rest;
       send("ui.more");
-      speak(rest, () => send("ui.done"));
+      play(report.restChunks, true);
     };
   }
 
+  document.getElementById("again").onclick = () => {
+    // Just the last sentence, not the whole report. That is what you actually missed.
+    const chunk = lastChunks[lastSpokenIndex];
+    if (chunk) play([{ text: chunk.text, pauseAfterMs: 0 }], false);
+  };
+
   document.getElementById("dismiss").onclick = () => {
-    try { speechSynthesis.cancel(); } catch {}
+    stopSpeaking();
     send("ui.done");
   };
+
+  // In Live mode the report plays itself. In Quiet mode nothing is spoken until you click.
+  if (mode === "live" && soundReady && key !== lastPlayedKey) {
+    lastPlayedKey = key;
+    document.getElementById("listen").click();
+  }
 }
 
 function sourceLabel(source) {
@@ -247,6 +345,9 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
+rateInput.value = String(rate);
+paintRate();
+paintMode();
 connect();
 </script>
 </body>

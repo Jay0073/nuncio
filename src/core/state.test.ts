@@ -226,8 +226,17 @@ describe("permissions and questions", () => {
 });
 
 describe("the speech budget", () => {
+  // Deliberately varied. Near-identical sentences would be removed by dropRepeats, which would
+  // make this test about de-duplication rather than about the budget.
+  const NOUNS = [
+    "formatter", "parser", "digest", "router", "cache", "logger", "schema", "adapter",
+    "queue", "worker", "session", "budget", "contract", "marker", "index", "reducer",
+  ];
   const long = (n: number) =>
-    Array.from({ length: n }, (_, i) => `Sentence number ${i} here.`).join(" ");
+    Array.from(
+      { length: n },
+      (_, i) => `The ${NOUNS[i % NOUNS.length]} at position ${i} was checked and confirmed.`,
+    ).join(" ");
 
   test("a long report is cut and the rest is held", () => {
     const state = run(busy(true), text(block(`did: ${long(40)}`)), finished);

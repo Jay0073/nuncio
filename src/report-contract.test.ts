@@ -56,6 +56,24 @@ nested groups correctly.
     expect(parseSpeakBlock("<<SPEAK>>\ndid: none\nask: N/A\n<<END>>")).toBeNull();
   });
 
+  test("a model that echoes the template produces no block at all", () => {
+    // The skeleton parses perfectly and says nothing. Speaking "what happened, in order, with
+    // the real names" aloud is worse than silence, so it must not count as a report.
+    const echoed = `<<SPEAK>>
+did: what happened, in order, with the real names
+decision: a choice you made that I might disagree with, and why
+ask: a question you need answered, with the options
+<<END>>`;
+    expect(parseSpeakBlock(echoed)).toBeNull();
+  });
+
+  test("real content that happens to start similarly is kept", () => {
+    const text = "<<SPEAK>>\ndid: What happened was the parser silently dropped empty lines.\n<<END>>";
+    expect(parseSpeakBlock(text)?.did).toBe(
+      "What happened was the parser silently dropped empty lines.",
+    );
+  });
+
   test("does not mistake real content that starts with a filler word", () => {
     const text = "<<SPEAK>>\ndid: No database credentials were set, so I stopped.\n<<END>>";
     expect(parseSpeakBlock(text)?.did).toBe("No database credentials were set, so I stopped.");
@@ -99,6 +117,24 @@ describe("renderForSpeech", () => {
     expect(renderForSpeech({ did: "Changed `index.ts` and **package.json**" })).toBe(
       "Changed index.ts and package.json.",
     );
+  });
+
+  test("reduces a directory path to the file name", () => {
+    // Observed on a real run despite the contract asking for file names only. Spoken,
+    // "src/lib/group.ts" is "source slash lib slash group dot t s".
+    expect(renderForSpeech({ did: "It differs from the one in src/lib/group.ts" })).toBe(
+      "It differs from the one in group.ts.",
+    );
+    expect(renderForSpeech({ did: "I edited C:\\Users\\jay\\projects\\standup\\package.json" })).toBe(
+      "I edited package.json.",
+    );
+  });
+
+  test("does not mangle ordinary text that contains a slash", () => {
+    expect(renderForSpeech({ did: "Use it for reads and/or writes" })).toBe(
+      "Use it for reads and/or writes.",
+    );
+    expect(renderForSpeech({ did: "It ran on 09/08/2026" })).toBe("It ran on 09/08/2026.");
   });
 
   test("handles a block with one field", () => {

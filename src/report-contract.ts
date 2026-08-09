@@ -62,27 +62,68 @@ A text-to-speech engine reads this block aloud. I may be away from the screen wh
 Your normal response stays on screen exactly as you would write it. This block is extra, and it
 is the only part that is spoken.
 
-## What to write
+## The one rule that matters
 
-Write what a colleague would tell me if I walked up and asked how it went. Not "it is done".
-Not the whole transcript. The parts I would actually want to hear.
+**Write it for someone who has not seen your response, has not seen the code, and does not
+remember this project.** That is me. I have not been watching. I did not read the file you
+read. I do not know what the error was. I only know what I asked for.
 
-Name real things. Say which function, which file, which test. "Two tests broke" is weaker than
-"the hourly grouping test failed and the summary test errored".
+So never mention a thing without naming it first.
 
-Include what came up along the way: what failed, what surprised you, what you had to work
-around. That belongs in \`did\` — it is part of what happened.
+"Fixed the wrong data issues. All 20 tests pass." tells me nothing. I do not know there were
+data issues, which file they were in, what was actually wrong, or why it mattered. That is a
+receipt, not an explanation.
+
+If you find yourself writing "the issue", "the bug", "the function", or "it" without having
+said which one — stop and name it.
+
+## did — the main line
+
+Answer these three in order, written as one flowing piece of speech, not as a list:
+
+1. **What this is about.** Name the thing. Say where it lives and why it mattered. Assume I
+   know nothing about it.
+2. **What you found, and what you did.** The specifics — which function, which test, what
+   broke.
+3. **Where it ended up.** Numbers.
+
+The target:
+
+  did: The digest was showing dates a day off for evening commits. Three places in the
+  formatter assumed UTC while git log returns local time, so anything after 6pm landed on the
+  wrong day. I converted all three and added a test for the evening case. All 20 tests pass.
+
+Compare that with "Fixed the date issues, tests pass." Same turn. One of them lets me
+understand without looking at the screen. That is the whole job.
 
 ## How much to say
 
 Length follows **what I asked for**, not how long you worked.
 
-- **I asked a question, or asked you to explain, review or compare something.**
+- **I asked you to review, audit, or find problems.**
+  The findings **are** the report. Name each one: where it is, what is wrong, and why it
+  matters. Do not tell me how many you found — tell me what they are. Counting them is
+  useless to someone who cannot see the list. This is your longest report, and that is correct.
+
+  **Give each finding its own sentence.** Never a comma-separated list. I cannot hold seven
+  items from one long sentence in my head, and a sentence I cannot finish is a sentence I did
+  not hear.
+
+  Not this:
+    did: Eight problems: the since parameter is dead, the empty object fails type checking,
+    getUTCHours groups by UTC, numeric keys sort wrongly, empty hours are missing...
+
+  This:
+    did: The since parameter is declared but never used. The result object is typed as empty,
+    so indexing it by number fails the type check. It groups by UTC hours while the rest of
+    the app formats in local time, so commits can land in the wrong bucket.
+
+- **I asked a question, or asked you to explain or compare something.**
   The report IS the answer, spoken. Do not describe that you answered — give the answer
-  itself. This is usually your longest report.
+  itself.
 
 - **I asked you to change something.**
-  What you changed, what broke or surprised you, what you decided, and where it ended up.
+  What it was, what you found, what you changed, and where it ended up.
 
 - **The turn was small.** One file read, one small edit, a yes or no.
   One sentence.
@@ -119,6 +160,8 @@ This is the target for a change-something turn:
 ## Rules
 
 - Always add the block. Even for a small turn. Even if you only answered a question.
+- **Never say the same thing twice.** If it is already in \`did\`, it does not go in
+  \`decision\` as well. I hear the whole thing in order, so a repeat is just wasted time.
 - Include only the lines that apply. If a line does not apply, LEAVE IT OUT COMPLETELY.
   Never write "none", "N/A", "nothing", or a dash. Those get spoken aloud and sound wrong.
 - At least one line must be present.
@@ -157,6 +200,20 @@ const KEY_LINE = new RegExp(`^\\s*(${SPEAK_KEYS.join("|")})\\s*:\\s*(.*)$`, "i")
  * at the end of the report. Filter them here rather than trusting the instruction.
  */
 const FILLER = /^(none|n\/?a|nothing|no|null|nil|-{1,2}|—|\.)\s*\.?$/i;
+
+/**
+ * The placeholder text from the template itself.
+ *
+ * A model that copies the skeleton instead of filling it in produces a block that parses
+ * perfectly and says nothing. Speaking "what happened, in order, with the real names" aloud
+ * would be worse than saying nothing at all, so these are treated as empty.
+ */
+const TEMPLATE = [
+  /^what happened,? in order/i,
+  /^a choice (you|i) made/i,
+  /^a question (you|i) need/i,
+  /^what this (is )?(about|concerns)/i,
+];
 
 /**
  * Pull the block out of an assistant response.
@@ -201,7 +258,9 @@ export function parseSpeakBlock(text: string): SpeakBlock | null {
   for (const key of SPEAK_KEYS) {
     const value = block[key];
     if (value === undefined) continue;
-    if (value === "" || FILLER.test(value)) delete block[key];
+    if (value === "" || FILLER.test(value) || TEMPLATE.some((p) => p.test(value))) {
+      delete block[key];
+    }
   }
 
   return Object.keys(block).length > 0 ? block : null;
@@ -216,26 +275,56 @@ export function stripSpeakBlock(text: string): string {
   return (text.slice(0, start) + tail).trimEnd();
 }
 
+export interface Segment {
+  field: SpeakKey;
+  text: string;
+}
+
 /**
- * Turn a block into one piece of text ready for a speech engine.
+ * Split a block into its fields, ready for speech.
+ *
+ * Kept as separate segments rather than one joined string because the field boundaries are
+ * where a real pause belongs — they are topic changes. Sentences inside one field are one
+ * continuous thought and should barely pause. See `src/core/speech.ts`.
  *
  * Markdown and backticks are stripped here as well as forbidden in the instruction, because
  * models emit them anyway and a spoken asterisk is worse than a missed one.
  */
-export function renderForSpeech(block: SpeakBlock): string {
-  const parts: string[] = [];
-  if (block.did) parts.push(block.did);
-  if (block.decision) parts.push(`One decision: ${block.decision}`);
-  if (block.ask) parts.push(block.ask);
+export function renderSegments(block: SpeakBlock): Segment[] {
+  const segments: Segment[] = [];
 
-  return parts
-    .map(clean)
-    .map((p) => (/[.?!]$/.test(p) ? p : `${p}.`))
+  const add = (field: SpeakKey, text: string | undefined, prefix = ""): void => {
+    if (!text) return;
+    const cleaned = clean(prefix + text);
+    if (cleaned) segments.push({ field, text: /[.?!]$/.test(cleaned) ? cleaned : `${cleaned}.` });
+  };
+
+  add("did", block.did);
+  add("decision", block.decision, "One decision: ");
+  add("ask", block.ask);
+  return segments;
+}
+
+/** The whole block as one string. Used for display and for measuring length. */
+export function renderForSpeech(block: SpeakBlock): string {
+  return renderSegments(block)
+    .map((s) => s.text)
     .join(" ");
 }
 
+/**
+ * Directory paths, reduced to the file name.
+ *
+ * The contract asks for file names only, and the model still wrote "src/lib/group.ts". Spoken,
+ * that is "source slash lib slash group dot t s" — three quarters of it noise.
+ *
+ * Only fires when the last segment looks like a real file name, so "and/or" and dates survive.
+ */
+const PATH = /\b[\w.@:-]+(?:[\\/][\w.@-]+)*[\\/]([\w-]+\.[A-Za-z][\w]*)\b/g;
+
 function clean(text: string): string {
   return text
+    .replace(PATH, "$1")
     .replace(/`+/g, "")
     .replace(/\*\*?/g, "")
     .replace(/^#+\s*/gm, "")

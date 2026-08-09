@@ -11,14 +11,18 @@
  * at the screen is better than two minutes of markdown read aloud.
  */
 
-import { parseSpeakBlock, renderForSpeech, wordCount } from "../report-contract.ts";
-import { budgetFor, trimToBudget } from "./budget.ts";
+import { parseSpeakBlock, renderSegments, wordCount } from "../report-contract.ts";
+import { budgetFor } from "./budget.ts";
+import { chunkText, chunkWords, dropRepeats, toChunks, type Chunk } from "./speech.ts";
 
 export interface Report {
-  /** What gets spoken now. Already trimmed to the budget. */
+  /** What gets spoken now, as one string. For display and for tests. */
   text: string;
-  /** What was held back. Empty when nothing was cut. "More" reads this from memory (D-024). */
+  /** What gets spoken now, in chunks with the pause after each. This is what the page plays. */
+  chunks: Chunk[];
+  /** Held back by the budget. Empty when nothing was cut. "More" reads this (D-024). */
   rest: string;
+  restChunks: Chunk[];
   source: "block" | "fallback" | "permission" | "question" | "error";
   /** True when the agent is stopped until you answer. Drives the "needs you" ping. */
   needsYou: boolean;
@@ -33,19 +37,68 @@ export function buildReport(text: string | null, filePaths: string[]): Report {
 
   const block = text ? parseSpeakBlock(text) : null;
   if (block) {
-    const full = renderForSpeech(block);
-    const { spoken, rest } = trimToBudget(full, budgetFor(files.length));
+    const all = toChunks(renderSegments(block));
+    const { spoken, rest } = splitAtBudget(all, budgetFor(files.length));
+    // The contract forbids repeating across lines, but instructions are not enough.
+    const trimmedRest = dropRepeats(spoken, rest);
+
     return {
-      text: spoken,
-      rest,
+      text: chunkText(spoken),
+      chunks: spoken,
+      rest: chunkText(trimmedRest),
+      restChunks: trimmedRest,
       source: "block",
       needsYou: block.ask !== undefined,
       files,
-      ...(rest ? { fullWords: wordCount(full) } : {}),
+      ...(trimmedRest.length > 0 ? { fullWords: chunkWords(all) } : {}),
     };
   }
 
-  return { text: fallbackText(files), rest: "", source: "fallback", needsYou: false, files };
+  return plain(fallbackText(files), "fallback", false, files);
+}
+
+/**
+ * Cut a chunk list at a word budget.
+ *
+ * Never cuts mid-sentence, because the chunks are already whole sentences. The first chunk is
+ * always kept even if it alone blows the budget — speaking half a thought is worse than
+ * running slightly long.
+ */
+function splitAtBudget(chunks: Chunk[], budget: number): { spoken: Chunk[]; rest: Chunk[] } {
+  let words = 0;
+  let index = 0;
+
+  for (const chunk of chunks) {
+    const length = chunk.text.split(/\s+/).filter(Boolean).length;
+    if (index > 0 && words + length > budget) break;
+    words += length;
+    index++;
+    if (words >= budget) break;
+  }
+
+  const spoken = chunks.slice(0, index);
+  const rest = chunks.slice(index);
+  // Nothing gained by holding back a single trailing sentence.
+  if (rest.length === 0) return { spoken: chunks, rest: [] };
+
+  // The last spoken chunk now ends the spoken half, so it should not trail off into a pause.
+  const last = spoken.at(-1);
+  if (last) spoken[spoken.length - 1] = { ...last, pauseAfterMs: 0 };
+
+  return { spoken, rest };
+}
+
+/** A one-piece report: a permission, a question, an error, or the fallback. */
+export function plain(
+  text: string,
+  source: Report["source"],
+  needsYou: boolean,
+  files: string[] = [],
+): Report {
+  const chunks = toChunks([{ field: "did", text }]);
+  const last = chunks.at(-1);
+  if (last) chunks[chunks.length - 1] = { ...last, pauseAfterMs: 0 };
+  return { text, chunks, rest: "", restChunks: [], source, needsYou, files };
 }
 
 /**
@@ -73,3 +126,5 @@ export function fileName(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
 }
+
+export { wordCount };

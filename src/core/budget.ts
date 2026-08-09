@@ -14,11 +14,23 @@
 /**
  * How many words to speak before offering the rest.
  *
- * Scaled by the work actually done in the turn, using the `file.edited` events nuncio already
- * has. A turn that touched nothing does not earn 100 words. A turn that rewrote six files does.
+ * The first version scaled purely by files changed, so a turn that wrote nothing got the
+ * smallest budget — 45 words. That is exactly backwards. An audit changes no files and is the
+ * **longest** report type: asked to review a function, the agent found seven real problems and
+ * only two of them fitted.
+ *
+ * The rule that actually holds:
+ *
+ * - **A turn that changed code should be concise.** The diff is on screen and you can read it.
+ *   More files means more to say, so it scales: 70, then 100.
+ * - **A turn that changed nothing has nothing to look at instead.** It is an answer, an
+ *   explanation or an audit, and the words *are* the deliverable. It gets the most room.
+ *
+ * A short report is never cut in any case, so the larger no-change budget only ever applies to
+ * reports that genuinely have a lot to say.
  */
 export function budgetFor(filesChanged: number): number {
-  if (filesChanged === 0) return 45;
+  if (filesChanged === 0) return 90;
   if (filesChanged <= 3) return 70;
   return 100;
 }

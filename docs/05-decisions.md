@@ -285,6 +285,91 @@ Two bugs from real use, both caused by holding a single waiting item.
 Reports queue **behind** anything blocking the agent, because an unanswered permission has
 stopped the work and matters more than a summary.
 
+### D-029 — Context lives inside `did:`, not in a separate `about:` key
+**Status:** active
+The reports were unhelpful because they assumed the listener had been watching. "Fixed the wrong
+data issues" is a receipt: you do not know there were data issues, which file, or why it
+mattered.
+
+The fix considered was a fourth key, `about:`. Rejected for two reasons:
+
+1. **It breaks the narrative.** A separate field is spoken as its own chunk with a pause after
+   it, so you hear two statements instead of one story. A person says it as one flow: "The
+   digest was showing dates a day off for evening commits. Three places assumed UTC…"
+2. **It only proves a line is present, not that it is useful.** A model can write
+   `about: The date handling` and pass the check while telling you nothing. That is a false
+   sense of verification bought at the cost of the flow.
+
+Instead `did:` has an explicit three-part shape: what this is about (naming the thing, where it
+lives, why it mattered), what you found and did, where it ended up. Three keys stay.
+
+The governing line in the contract is: **write it for someone who has not seen your response,
+has not seen the code, and does not remember this project.**
+
+### D-030 — Pauses follow structure and density, not punctuation
+**Status:** active
+Uniform sentence-by-sentence gaps sound like a metronome. Two signals give real pacing for free:
+
+- **Field boundaries are topic changes** — 800ms between `did`, `decision` and `ask`.
+- **Density earns a beat** — 150ms plus 15ms per word of the sentence just spoken, capped at
+  450ms. A 25-word sentence gets time to land; a 6-word one barely pauses.
+
+This matters more than it looks: the owner is not a native English speaker and reads in bursts.
+A continuous stream at one pace is what breaks comprehension, and a nicer voice does not fix it.
+
+Browsers ignore SSML break tags, so this cannot be marked up. Each sentence is its own utterance
+and the silence between them is real waiting.
+
+### D-031 — A turn that changed nothing gets the LARGEST budget
+**Status:** active
+The first budget scaled purely by files changed, so a no-change turn got 45 words — the
+smallest. That is backwards. An audit changes no files and is the longest report type: asked to
+review one function, the agent found seven real problems and only two of them fitted.
+
+The rule that holds: **a code-change turn should be concise** because the diff is on screen and
+you can read it (70 words, 100 for four or more files). **A turn that changed nothing has
+nothing to look at instead** — the words are the deliverable (90 words).
+
+A short report is never cut, so the larger budget only ever applies where there is genuinely a
+lot to say.
+
+### D-032 — One finding per sentence, with a splitter as backstop
+**Status:** active
+Asked to review a function, the agent wrote all eight findings as a single 62-word comma list.
+It could not be chunked and did not fit the budget, so **every finding** was pushed to "More"
+and the spoken half was three sentences of preamble and nothing else.
+
+Two fixes, because the instruction alone is not enough:
+
+1. The contract asks for one sentence per finding, with a worked before-and-after.
+2. `splitLong` breaks any sentence over 28 words at its comma and semicolon joints. A sentence
+   with no commas is left whole rather than butchered.
+
+After both: all five findings fit in the spoken half.
+
+### D-033 — Quiet and Live are modes the user picks, not states nuncio guesses
+**Status:** active
+The owner asked for GPT-Live-style narration during the run, which conflicts with D-003.
+
+"Speak when the page is focused" was considered and rejected: focus is a desk concept, and the
+moment you are walking with earphones there is no page to focus. It fails exactly where the
+product is meant to win.
+
+So it is an explicit mode, remembered between sessions:
+
+- **Quiet** (default) — tones only, speaks when asked. The junior-developer model, which is how
+  the owner described what he actually wants: a junior does not narrate every change, he tells
+  you when you ask.
+- **Live** — plays each report as it arrives. For walking with earphones.
+
+D-003 stands as the default rather than being reversed.
+
+### D-034 — A block that echoes the template is treated as no block
+**Status:** active
+A model that copies the skeleton instead of filling it in produces a block that parses perfectly
+and says nothing. Speaking "what happened, in order, with the real names" aloud is worse than
+silence, so placeholder text is filtered like `none` and `N/A` are.
+
 ---
 
 ## Superseded decisions

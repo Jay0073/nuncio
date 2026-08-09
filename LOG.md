@@ -7,6 +7,67 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — v1.2: the content fix. Reports you can understand without the screen.
+
+**Version:** v1.2
+**Type:** feature
+**Changed:**
+
+- `src/report-contract.ts` — rewritten around one rule: write for someone who has not seen your
+  response, has not seen the code, and does not remember this project. `did:` now has an
+  explicit three-part shape. Audits name each finding, one per sentence. No repeating across
+  lines. Template-echo guard. Directory paths reduced to file names in `clean()`.
+- `src/core/speech.ts` (new) — chunking, structure-and-density pauses, `splitLong`,
+  `dropRepeats`.
+- `src/core/budget.ts` — a no-change turn now gets the largest budget, not the smallest.
+- `src/core/report.ts` — reports carry `chunks` and `restChunks`.
+- `src/web/index.html` — sentence-by-sentence playback with real silences, a speed control that
+  persists, "Again" for the last sentence only, and the Quiet / Live toggle.
+
+Decisions D-029 through D-034.
+
+**Why:** The owner used v1 to build a real project. His verdict: the reports were good but
+"just summarization", and he still had to read the screen. His own diagnosis was the right one —
+**the report assumed he had been watching.** "Fixed the wrong data issues" is a receipt. He did
+not know there were data issues, which file they were in, or why they mattered.
+
+**Result — measured on the same audit task, before and after:**
+
+Before, on a request to review a function:
+
+> "The function you pasted is not the one in the repo. The repo version already uses a Map…
+> I reviewed the pasted version anyway."
+> *(then all eight findings pushed to "More" as one 62-word comma list)*
+
+After:
+
+> "I reviewed groupCommitsByHour in the grouping module. Five problems. The since parameter is
+> declared but never used, so it filters nothing. The output object is inferred as empty type,
+> so indexing it fails the type check. It groups by UTC hours while the rest of the app formats
+> in local time, so commits can land in the wrong hour bucket. An invalid date makes the hour
+> NaN, which creates a stray NaN key. And there is no return type annotation."
+
+Every finding names the thing and says why it matters. All five fit in the spoken half. Pauses
+ranged 180ms to 450ms with sentence density.
+
+**Three bugs found only by running it, not by tests:**
+
+1. **The budget was backwards.** Scaling purely by files changed gave an audit — which changes
+   no files and is the longest report type — the smallest budget of 45 words. Seven findings
+   were found and two fitted. Inverted: no-change turns now get the most room (D-031).
+2. **One runaway sentence swallowed the whole report.** The agent wrote eight findings as a
+   single 62-word comma list, which could not be chunked, so all of it went to "More" (D-032).
+3. **`dropRepeats` was silently deleting real content.** Numbers were stripped from the
+   fingerprint, so "Three tests failed" and "Two tests failed" looked identical and the second
+   was dropped. Numbers are often the only thing that differs and the only thing that matters.
+
+**One false alarm worth recording.** A run appeared to show the model echoing the contract
+template verbatim. It was my smoke script reading the last text part of *any* message, including
+my own prompt, which contains the template. The script now filters to assistant messages. The
+failure mode is real enough to guard against anyway, so D-034 filters placeholder text.
+
+---
+
 ## 2026-08-09 — Measured what `<<STEP>>` markers cost. 40 runs.
 
 **Version:** v1.2 (planning)
