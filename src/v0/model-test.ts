@@ -26,9 +26,11 @@ import { join } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import { BASE_URL, EVENTS_DIR } from "../config.ts";
 import {
-  REPORT_CONTRACT,
+  buildContract,
   parseSpeakBlock,
+  parseSteps,
   renderForSpeech,
+  wordCount,
   type SpeakBlock,
 } from "../report-contract.ts";
 
@@ -48,6 +50,8 @@ interface Attempt {
   ms: number;
   block: SpeakBlock | null;
   spoken: string;
+  words: number;
+  steps: number;
   text: string;
   error?: string;
 }
@@ -57,12 +61,17 @@ interface Options {
   models: (string | undefined)[];
   task: string;
   timeoutMs: number;
+  /** Run the contract with and without <<STEP>> markers and compare compliance. */
+  compare: boolean;
+  steps: boolean;
 }
 
 function parseArgs(argv: string[]): Options {
   let runs = 10;
   let task = DEFAULT_TASK;
   let timeoutMs = 120_000;
+  let compare = false;
+  let steps = false;
   const models: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -71,10 +80,12 @@ function parseArgs(argv: string[]): Options {
     if (argv[i] === "--model" && argv[i + 1]) models.push(argv[++i]!);
     if (argv[i] === "--timeout" && argv[i + 1]) timeoutMs = (Number(argv[++i]) || 120) * 1000;
     if (argv[i] === "--tools") task = TOOL_TASK;
+    if (argv[i] === "--compare") compare = true;
+    if (argv[i] === "--steps") steps = true;
   }
 
   // `undefined` means: send no model field, so OpenCode uses its configured default.
-  return { runs, task, timeoutMs, models: models.length > 0 ? models : [undefined] };
+  return { runs, task, timeoutMs, compare, steps, models: models.length > 0 ? models : [undefined] };
 }
 
 /**
@@ -204,6 +215,7 @@ async function runOnce(
   task: string,
   run: number,
   timeoutMs: number,
+  contract: string,
 ): Promise<Attempt> {
   const started = Date.now();
   const fail = (error: string): Attempt => ({
@@ -212,6 +224,8 @@ async function runOnce(
     ms: Date.now() - started,
     block: null,
     spoken: "",
+    words: 0,
+    steps: 0,
     text: "",
     error,
   });
@@ -231,7 +245,7 @@ async function runOnce(
         path: { id: sessionId },
         body: {
           ...toModelBody(model),
-          parts: [{ type: "text", text: `${REPORT_CONTRACT}\n\n---\n\n${task}` }],
+          parts: [{ type: "text", text: `${contract}\n\n---\n\n${task}` }],
         },
       } as never),
       timeoutMs,
@@ -240,13 +254,16 @@ async function runOnce(
 
     const text = extractText(response);
     const block = parseSpeakBlock(text);
+    const spoken = block ? renderForSpeech(block) : "";
 
     return {
       run,
       ok: block !== null,
       ms: Date.now() - started,
       block,
-      spoken: block ? renderForSpeech(block) : "",
+      spoken,
+      words: wordCount(spoken),
+      steps: parseSteps(text).length,
       text,
     };
   } catch (error) {
@@ -264,53 +281,77 @@ function notesFor(attempts: Attempt[]): string {
   const keys = new Set<string>();
   for (const a of withBlock) for (const k of Object.keys(a.block!)) keys.add(k);
 
-  const done = attempts.filter((a) => !a.error);
-  const median = done.length
-    ? Math.round(done.map((a) => a.ms).sort((x, y) => x - y)[Math.floor(done.length / 2)]! / 1000)
-    : 0;
-
-  const parts = [`keys: ${[...keys].join(", ")}`, `median ${median}s`];
+  const parts = [
+    `keys: ${[...keys].join(", ")}`,
+    `median ${median(attempts.filter((a) => !a.error).map((a) => a.ms))}ms`,
+    `median ${median(withBlock.map((a) => a.words))}w`,
+  ];
+  const steps = withBlock.reduce((n, a) => n + a.steps, 0);
+  if (steps > 0) parts.push(`${(steps / withBlock.length).toFixed(1)} steps/turn`);
   if (errors > 0) parts.push(`${errors} failed`);
   return parts.join("; ");
 }
 
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return Math.round(sorted[Math.floor(sorted.length / 2)]!);
+}
+
 async function main(): Promise<void> {
-  const { runs, models, task, timeoutMs } = parseArgs(process.argv.slice(2));
+  const { runs, models, task, timeoutMs, compare, steps } = parseArgs(process.argv.slice(2));
   const client = createOpencodeClient({ baseUrl: BASE_URL });
 
-  console.log("nuncio v0 — model reliability test");
-  console.log(`Server:  ${BASE_URL}`);
-  console.log(`Task:    ${task}`);
-  console.log(`Runs:    ${runs} per model`);
-  console.log(`Timeout: ${timeoutMs / 1000}s per run\n`);
+  // Which contract variants to try. --compare runs both so the cost of STEP markers is a
+  // measurement rather than a guess.
+  const variants: { name: string; contract: string }[] = compare
+    ? [
+        { name: "base", contract: buildContract() },
+        { name: "with STEP", contract: buildContract({ steps: true }) },
+      ]
+    : [{ name: steps ? "with STEP" : "base", contract: buildContract({ steps }) }];
+
+  console.log("nuncio — contract reliability test");
+  console.log(`Server:   ${BASE_URL}`);
+  console.log(`Task:     ${task}`);
+  console.log(`Runs:     ${runs} per model per variant`);
+  console.log(`Variants: ${variants.map((v) => v.name).join(", ")}`);
+  console.log(`Timeout:  ${timeoutMs / 1000}s per run`);
+  for (const v of variants) {
+    console.log(`  contract "${v.name}": ${wordCount(v.contract)} words`);
+  }
+  console.log("");
 
   const available = await listModels();
   if (available.length > 0) {
     console.log(`${available.length} models available. Test one with --model <id>. For example:`);
-    for (const id of available.slice(0, 5)) console.log(`  --model ${id}`);
+    for (const id of available.slice(0, 3)) console.log(`  --model ${id}`);
     console.log("");
   }
 
   const results = new Map<string, Attempt[]>();
 
   for (const model of models) {
-    const label = model ?? "(OpenCode default)";
-    console.log(`=== ${label} ===`);
-    const attempts: Attempt[] = [];
+    for (const variant of variants) {
+      const label = `${model ?? "(default)"}  [${variant.name}]`;
+      console.log(`=== ${label} ===`);
+      const attempts: Attempt[] = [];
 
-    for (let run = 1; run <= runs; run++) {
-      process.stdout.write(`  run ${run}/${runs} ... `);
-      const attempt = await runOnce(client, model, task, run, timeoutMs);
-      attempts.push(attempt);
+      for (let run = 1; run <= runs; run++) {
+        process.stdout.write(`  run ${run}/${runs} ... `);
+        const attempt = await runOnce(client, model, task, run, timeoutMs, variant.contract);
+        attempts.push(attempt);
 
-      const secs = `${(attempt.ms / 1000).toFixed(1)}s`;
-      if (attempt.error) console.log(`ERROR    ${secs}  ${attempt.error}`);
-      else if (attempt.ok) console.log(`ok       ${secs}  "${attempt.spoken.slice(0, 60)}"`);
-      else console.log(`NO BLOCK ${secs}  (${attempt.text.length} chars returned)`);
+        const secs = `${(attempt.ms / 1000).toFixed(1)}s`;
+        if (attempt.error) console.log(`ERROR    ${secs}  ${attempt.error}`);
+        else if (attempt.ok)
+          console.log(`ok       ${secs}  ${attempt.words}w  ${attempt.steps} steps`);
+        else console.log(`NO BLOCK ${secs}  (${attempt.text.length} chars returned)`);
+      }
+
+      results.set(label, attempts);
+      console.log("");
     }
-
-    results.set(label, attempts);
-    console.log("");
   }
 
   // Raw output, redacted, so a failure can be read by hand rather than guessed at.

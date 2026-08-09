@@ -7,6 +7,45 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — Measured what `<<STEP>>` markers cost. 40 runs.
+
+**Version:** v1.2 (planning)
+**Type:** experiment
+**Changed:** `src/report-contract.ts` now exposes `buildContract({ steps })` and `parseSteps`.
+`bun run model-test -- --compare` runs both variants and reports compliance, latency and report
+length side by side.
+
+**Why:** I told the owner that STEP markers "may hurt compliance" with no evidence. He asked
+for numbers instead of a hedge. He was right to.
+
+**Result — 40 runs, two models, ten per cell:**
+
+| | Base | With STEP | Change |
+|---|---|---|---|
+| Block emitted | 20 / 20 | 19 / 20 | −5 points, one failure |
+| Median latency | 9.7s | 10.0s | +3% |
+| Median report length | 44 words | 58 words | +32% |
+
+**The important findings are not the headline number:**
+
+1. **Compliance is not the problem at all.** 20 out of 20 on the base contract. The format is
+   being followed. So the reports being unhelpful is a *content* problem, and no amount of
+   format work will fix it.
+2. **Zero step markers were emitted in any of the 20 STEP runs.** The task had no tools and no
+   milestones, so there was nothing to narrate. This measured the cost of the instruction and
+   not its benefit. The benefit is still unmeasured.
+3. **Reports got 32% longer with the STEP section.** Unexpected, larger than the compliance
+   cost, and it works against the budget we just added.
+
+**Recommendation:** do not add STEP markers yet. Fix the content problem (`about:` and depth by
+turn type) first and measure that alone. Adding both at once means not knowing which helped,
+and the +32% length would confound the length work directly.
+
+**Honest limit:** one failure in twenty cannot be distinguished from noise at n=10. "No large
+cost" is supported. "Exactly 5%" is not.
+
+---
+
 ## 2026-08-09 — v1.1: four fixes from real use
 
 **Version:** v1.1

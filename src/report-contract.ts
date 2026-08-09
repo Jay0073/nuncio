@@ -24,7 +24,31 @@ export type SpeakBlock = Partial<Record<SpeakKey, string>>;
 /** Above this, the report is too long to listen to. Track EAR L3 turns this into a real budget. */
 export const MAX_WORDS = 120;
 
-export const REPORT_CONTRACT = `# Spoken report
+export const STEP_OPEN = "<<STEP>>";
+
+/**
+ * The optional progress-marker section.
+ *
+ * Kept separate so its cost can be measured. `bun run model-test -- --compare` runs the
+ * contract with and without it and reports how often each still produces a valid final block.
+ * Do not enable it on a hunch — enable it on a number.
+ */
+const STEP_SECTION = `
+
+## While you work
+
+As you go, write a single line at each real milestone:
+
+${STEP_OPEN} what you just found or just did, one short sentence
+
+A milestone is: you understood the problem, you found the cause, you finished a piece, you got
+blocked, or you started something that will take a while. Not every file read. Three or four
+per turn at most.
+
+These are spoken while I wait, so I can follow along instead of hearing nothing for ten
+minutes. Same style rules as the report below.`;
+
+const CONTRACT_BODY = `# Spoken report
 
 At the end of every turn, after your normal response, add this block:
 
@@ -99,6 +123,29 @@ This is the target for a change-something turn:
   Never write "none", "N/A", "nothing", or a dash. Those get spoken aloud and sound wrong.
 - At least one line must be present.
 - Put the block at the very end. Write nothing after ${SPEAK_CLOSE}.`;
+
+export interface ContractOptions {
+  /** Ask for `<<STEP>>` progress lines during the turn. Off until measured. */
+  steps?: boolean;
+}
+
+export function buildContract(options: ContractOptions = {}): string {
+  return options.steps ? CONTRACT_BODY + STEP_SECTION : CONTRACT_BODY;
+}
+
+export const REPORT_CONTRACT = buildContract();
+
+/** Pull the progress lines out of a partial response. */
+export function parseSteps(text: string): string[] {
+  const found: string[] = [];
+  for (const line of text.split("\n")) {
+    const index = line.indexOf(STEP_OPEN);
+    if (index === -1) continue;
+    const content = line.slice(index + STEP_OPEN.length).trim();
+    if (content) found.push(content);
+  }
+  return found;
+}
 
 const KEY_LINE = new RegExp(`^\\s*(${SPEAK_KEYS.join("|")})\\s*:\\s*(.*)$`, "i");
 

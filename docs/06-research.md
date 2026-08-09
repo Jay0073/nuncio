@@ -291,9 +291,45 @@ owner's real coding sessions. See decision D-015.
 Fill this in by running `bun run model-test`. It prints the table ready to paste. Record the
 exact model identifier as OpenCode reports it, not a remembered display name.
 
-| Model ID (as OpenCode reports it) | Block emitted correctly | Notes |
-|---|---|---|
-| (OpenCode default) | 1 / 1 | smoke test only, not a result. keys: done, ask. ~6–10s per turn. |
+Measured 9 August 2026. 40 runs. Task: "In two sentences, explain what a JWT refresh token is
+and why it is used." No tools, so it cannot deadlock on a permission.
+
+| Model | Variant | Block emitted | Median latency | Median report | Steps emitted |
+|---|---|---|---|---|---|
+| opencode/big-pickle | base | **10 / 10** | 9879ms | 43 words | — |
+| opencode/big-pickle | with `<<STEP>>` | **9 / 10** | 9927ms | 59 words | 0 |
+| opencode/deepseek-v4-flash-free | base | **10 / 10** | 9567ms | 45 words | — |
+| opencode/deepseek-v4-flash-free | with `<<STEP>>` | **10 / 10** | 10075ms | 57 words | 0 |
+
+**Compliance is not the problem.** 20 out of 20 on the base contract, on both models. The block
+contract works. Whatever is wrong with the reports is about *content*, not about the format
+being followed.
+
+### What adding `<<STEP>>` costs
+
+| | Base | With STEP | Change |
+|---|---|---|---|
+| Block emitted | 20 / 20 (100%) | 19 / 20 (95%) | **−5 points, one failure** |
+| Median latency | 9.7s | 10.0s | +3% |
+| Median report length | 44 words | 58 words | **+32%** |
+
+**Three limits on this measurement, and they matter:**
+
+1. **One failure in twenty is not distinguishable from noise.** With ten runs per cell the
+   interval is wide. The honest reading is "no large cost", not "exactly 5%".
+2. **Zero step markers were emitted in any run.** The task was a single explanation with no
+   tools and no milestones, so there was nothing to narrate and the models were right not to.
+   This measures the **cost** of the instruction, not its **benefit**. Measuring the benefit
+   needs a real multi-step task, which needs permissions set to allow.
+3. **The reports got 32% longer.** Not expected. Asking for progress narration made the final
+   report more verbose too. That side effect is larger than the compliance cost, and it works
+   directly against the budget.
+
+### Which keys the models actually use
+
+Only `did`, plus `decision` once. That is correct on this task — a two-sentence explanation has
+no decision to flag and nothing to ask. It does **not** show that extra keys are ignored. A
+richer task is needed before concluding anything about `about:`.
 
 **First observation, from the smoke run:** the model wrote `ask: none` instead of leaving the
 line out. Spoken aloud, the report ended with the word "none". The instruction now says
