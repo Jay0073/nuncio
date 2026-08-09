@@ -62,11 +62,9 @@
 <body>
 <header>
   <div class="brand">nuncio <span id="conn">connecting</span></div>
-  <div class="row" style="gap:8px">
-    <button id="mode" style="font-size:13px;padding:8px 12px">Quiet</button>
-    <button id="enable" style="font-size:13px;padding:8px 12px">Enable sound</button>
-  </div>
+  <button id="mode" class="primary" style="width:auto;font-size:14px;padding:10px 16px">…</button>
 </header>
+<div id="modeLine" style="width:100%;max-width:620px;margin:-14px 0 18px;font-size:14px"></div>
 <div style="width:100%;max-width:620px;margin-bottom:18px" class="status">
   <label for="rate" style="flex:none">Speed</label>
   <input type="range" id="rate" min="0.6" max="1.4" step="0.05" style="flex:1;max-width:220px" />
@@ -86,37 +84,46 @@
 let audio = null;
 let soundReady = false;
 
+/**
+ * Browsers refuse to play audio until the user has clicked something. That is a browser rule,
+ * not a nuncio setting — but an earlier version exposed it as an "Enable sound" button next to
+ * the real speak/do-not-speak toggle, and the two were impossible to tell apart. Now any click
+ * anywhere unlocks it, and the only visible control is the one that actually matters.
+ */
 function enableSound() {
+  if (soundReady) return;
   audio = audio || new (window.AudioContext || window.webkitAudioContext)();
   audio.resume();
-  // Browsers block audio until a user gesture. Speech has the same rule, so prime it too.
   try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch {}
   soundReady = true;
-  document.getElementById("enable").textContent = "Sound on";
-  document.getElementById("enable").disabled = true;
+  paintMode();
   if (window.Notification && Notification.permission === "default") Notification.requestPermission();
 }
-document.getElementById("enable").addEventListener("click", enableSound);
+document.addEventListener("click", enableSound, { once: true });
 
 // ---------------------------------------------------------------------------
 // Controls
 // ---------------------------------------------------------------------------
 const modeButton = document.getElementById("mode");
+const modeLine = document.getElementById("modeLine");
 const rateInput = document.getElementById("rate");
 const rateValue = document.getElementById("rateValue");
 
 function paintMode() {
-  modeButton.textContent = mode === "live" ? "Live" : "Quiet";
-  modeButton.title =
-    mode === "live"
-      ? "Speaks every report as it arrives. Click for Quiet."
-      : "Only speaks when you ask. Click for Live.";
+  const live = mode === "live";
+  modeButton.textContent = live ? "Speaking: ON" : "Speaking: OFF";
+  modeButton.style.background = live ? "" : "transparent";
+  modeButton.style.color = live ? "" : "var(--fg)";
+  modeLine.style.color = live ? "var(--done)" : "var(--dim)";
+  modeLine.textContent = live
+    ? "I will speak on my own — reports, questions and permissions, as they happen."
+    : "I will not speak until you click Listen. Turn this on to hear things automatically.";
 }
 
 modeButton.addEventListener("click", () => {
   mode = mode === "live" ? "quiet" : "live";
   localStorage.setItem("nuncio.mode", mode);
-  if (mode === "live" && !soundReady) enableSound();
+  enableSound();
   paintMode();
 });
 
@@ -216,6 +223,7 @@ let socket = null;
 let state = null;
 let lastWaitingKey = null;
 let lastPlayedKey = null;
+let lastState = null;
 let lastChunks = [];
 let lastSpokenIndex = 0;
 
@@ -252,6 +260,14 @@ function render() {
   if (!state) return;
   const queue = state.queue || [];
   const waiting = queue[0] || null;
+
+  // In Live mode, say something the moment work starts. Silence for ten minutes after you ask
+  // for something feels like nothing happened. Only on the transition INTO working — OpenCode
+  // fires "busy" about 17 times per turn.
+  if (mode === "live" && soundReady && state.state === "WORKING" && lastState !== "WORKING") {
+    speak("Okay, working on it.");
+  }
+  lastState = state.state;
 
   const dot = document.getElementById("dot");
   dot.className = "dot " + (waiting && waiting.ping === "error" ? "error" : state.state);
@@ -308,7 +324,7 @@ function render() {
   const hasMore = report.rest && report.rest.length > 0;
 
   body.innerHTML = `
-    ${soundReady ? "" : `<div class="warn">Press “Enable sound” once so the browser lets nuncio play audio.</div>`}
+    ${soundReady ? "" : `<div class="warn">Click anywhere on this page once — the browser will not play audio until you do.</div>`}
     <div class="card waiting">
       <div class="label">${escapeHtml(sourceLabel(report.source))}</div>
       <div class="report" id="reportText">${escapeHtml(report.text)}</div>
@@ -356,10 +372,17 @@ function render() {
     send("ui.done");
   };
 
-  // In Live mode the report plays itself. In Quiet mode nothing is spoken until you click.
+  // In Live mode the report plays itself — reports, questions and permissions alike. In Quiet
+  // nothing is spoken until you click.
+  //
+  // Live speaks the whole thing, budget and all. The budget exists so you can decide whether to
+  // hear the rest; walking with earphones you have nothing to click, so "there is more" would
+  // just be a dead end. It also has to advance the queue itself, or a second waiting item would
+  // never be reached.
   if (mode === "live" && soundReady && key !== lastPlayedKey) {
     lastPlayedKey = key;
-    document.getElementById("listen").click();
+    send("ui.open");
+    play([...report.chunks, ...(report.restChunks || [])], true);
   }
 }
 

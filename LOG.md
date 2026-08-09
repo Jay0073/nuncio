@@ -7,6 +7,51 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — Fixed the control that made nuncio look broken
+
+**Version:** v1.2.2
+**Type:** fix
+**Changed:** `src/web/index.html` — the two audio controls became one. `src/web/page.test.ts`
+(new) — smoke tests for the page. `src/v1/main.ts` — the startup message explains the control.
+
+**Why:** The owner reported twice that nuncio "was not speaking" and that Live mode did nothing.
+Nothing was broken. The page had **two buttons side by side**:
+
+- "Enable sound" — a browser requirement. Browsers refuse to play audio until the user clicks
+  something. It grants permission and nothing else.
+- "Quiet / Live" — the actual speak / do-not-speak toggle.
+
+He pressed the first one and reasonably expected speech. That is a UI failure, not a user error.
+
+**Result:**
+
+1. **The browser requirement is no longer a button.** Any click anywhere unlocks audio.
+2. **One visible control**, labelled `Speaking: ON` / `Speaking: OFF`, with a line under it
+   saying exactly what the current setting does.
+3. **Live now speaks the whole report**, budget and all, and advances the queue itself. The
+   budget exists so you can choose whether to hear the rest — walking with earphones there is
+   nothing to click, so "there is more" would be a dead end. It also means a second waiting item
+   is reached instead of the queue stalling.
+4. **An acknowledgement when work starts**, in Live mode: "Okay, working on it." He said this
+   "used to come" — it never existed. Silence for ten minutes after asking for something feels
+   like nothing happened.
+
+**The page now has tests, and the first run of them caught a real bug.** The button was removed
+but the instruction pointing at it was left behind: the page still said "Press Enable sound"
+when audio was locked. Exactly the same confusion, one layer down.
+
+The page is hand-edited HTML with inline script and had no coverage at all. `page.test.ts`
+checks that every `getElementById` target exists, that the script parses, that every `state.*`
+and `report.*` field the page reads still exists on the daemon types, and that no visible text
+points at a control that is gone.
+
+**Browser verification was attempted and abandoned.** The page serves correctly over HTTP (200,
+17KB, verified) but Chrome could not load it through the automation extension. Rather than chase
+that, the static checks above were written instead — they catch the class of mistake that
+actually occurred.
+
+---
+
 ## 2026-08-09 — v1.2.1: permissions that say what they do, and replay
 
 **Version:** v1.2.1

@@ -67,7 +67,10 @@ async function main(): Promise<void> {
   }
 
   console.log(`OpenCode: ${BASE_URL}`);
-  console.log(`nuncio:   ${server.url}   <- open this, then press "Enable sound"\n`);
+  console.log(`nuncio:   ${server.url}`);
+  console.log(`\nOpen that page. The button at the top right is the one that matters:`);
+  console.log(`  Speaking: OFF  — nothing is spoken until you click Listen`);
+  console.log(`  Speaking: ON   — reports, questions and permissions are spoken as they happen\n`);
 
   process.on("SIGINT", () => {
     void adapter.stop();
