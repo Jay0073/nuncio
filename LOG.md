@@ -7,6 +7,55 @@ Format is defined in [AGENTS.md](AGENTS.md), Rule 1.
 
 ---
 
+## 2026-08-09 — v1.2.1: permissions that say what they do, and replay
+
+**Version:** v1.2.1
+**Type:** fix
+**Changed:**
+
+- `src/adapters/describe.ts` — `describeStep` replaces the old generic action list. Each step
+  is described with its subject, from patterns that capture the meaningful argument.
+- `src/core/state.ts` — `history` (last 6 dealt-with items) and `turnStartedAt`.
+- `src/web/index.html` — recent reports are listed and click to replay; "Where are you?" while
+  working.
+- `src/report-contract.ts` — asks for simple English.
+
+**Why:** Three things reported from real use. Two were bugs; one was me not having built
+something.
+
+**Result:**
+
+1. **"A six-step command" told him nothing.** Replayed across all 51 real permissions, the
+   descriptions now name what each step does:
+   - *"I want to commit with the message, chore: scaffold Bun + TypeScript CLI project, then
+     read the git history."*
+   - *"I want to run the tests, then run the typecheck script, then run the index.ts script."*
+   - *"I want to edit index.ts, adding 3 lines and removing 1."*
+
+   Spoken length: 69 to 259 characters, median 100, from raw commands of up to 887.
+
+2. **A spoken report vanished with no way to hear it again.** State keeps the last six items;
+   the page lists them and replays from memory. Never asks the agent again.
+
+3. **Nothing to hear mid-run.** "Where are you?" answers with what nuncio actually knows —
+   files changed and elapsed time. Honest but mechanical. Real narrative progress needs
+   `<<STEP>>` markers, which stay deferred until the content work is measured.
+
+**Four bugs found by replaying the real capture rather than by unit tests:**
+
+- `New-Item -ItemType Directory -Path $fresh` became "create the folder **Directory**" — the
+  generic pattern picked up the value of an earlier flag. `-Path` is now matched first.
+- Steps were joined with "or", making a sequence read as a choice. Now "then".
+- `$base` became "delete **base**", which is meaningless. A value that is only a shell variable
+  is dropped and a generic word used instead.
+- The generic fallback produced "create the folder **a folder**". Fallbacks that need different
+  wording, not just a different noun, now have their own phrase builders.
+
+**Two things confirmed as working-as-intended, not broken:** step markers are switched off by
+decision, and Quiet mode does not speak until asked. Both were reported as possible faults.
+
+---
+
 ## 2026-08-09 — v1.2: the content fix. Reports you can understand without the screen.
 
 **Version:** v1.2
